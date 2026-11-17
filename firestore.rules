@@ -1,0 +1,306 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Reusable Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'pythonnmasterr@gmail.com';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidAdminRecord(data, adminId) {
+      return data.keys().hasAll(['uid', 'label', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'label', 'grantedBy', 'createdAt'])
+        && data.uid is string && data.uid == adminId && isValidId(data.uid)
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 120
+        && data.grantedBy is string && data.grantedBy == request.auth.uid && isValidId(data.grantedBy)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'emailVerified', 'provider', 'lastSignInAt', 'updatedAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && (!('emailVerified' in data) || data.emailVerified is bool)
+        && (!('provider' in data) || (data.provider is string && data.provider.size() <= 40))
+        && (!('lastSignInAt' in data) || (data.lastSignInAt is string && data.lastSignInAt.size() <= 64))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidScreening(data, screeningId) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'title', 'targetRole', 'candidateCount',
+          'averageScore', 'topSkills', 'topGaps', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'ownerId', 'title', 'targetRole', 'candidateCount',
+          'averageScore', 'topSkills', 'topGaps', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == screeningId && isValidId(data.id)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.targetRole is string && data.targetRole.size() <= 80
+        && data.candidateCount is int && data.candidateCount >= 1 && data.candidateCount <= 50
+        && data.averageScore is number && data.averageScore >= 0 && data.averageScore <= 100
+        && data.topSkills is list && data.topSkills.size() <= 10
+        && (data.topSkills.size() == 0 || data.topSkills[0] is map)
+        && data.topGaps is list && data.topGaps.size() <= 10
+        && (data.topGaps.size() == 0 || data.topGaps[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCandidate(data, screeningId, candidateId) {
+      return data.keys().hasAll([
+          'id', 'screeningId', 'ownerId', 'name', 'score', 'verdict',
+          'yearsExperience', 'skillsCount', 'measurableResults', 'wordCount',
+          'strongestArea', 'weakestArea', 'prefix', 'status', 'notes',
+          'detectedSkills', 'breakdown', 'categoryCounts', 'matchedJobs',
+          'recommendedSkills', 'tips', 'rawTextPreview', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'screeningId', 'ownerId', 'name', 'sourceFileName', 'score', 'verdict',
+          'yearsExperience', 'skillsCount', 'measurableResults', 'wordCount',
+          'strongestArea', 'weakestArea', 'prefix', 'status', 'notes',
+          'detectedSkills', 'breakdown', 'categoryCounts', 'matchedJobs',
+          'recommendedSkills', 'tips', 'rawTextPreview', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == candidateId && isValidId(data.id)
+        && data.screeningId is string && data.screeningId == screeningId && isValidId(data.screeningId)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && (!('sourceFileName' in data) || (data.sourceFileName is string && data.sourceFileName.size() <= 200))
+        && data.score is number && data.score >= 0 && data.score <= 100
+        && data.verdict is string && data.verdict.size() >= 1 && data.verdict.size() <= 80
+        && data.yearsExperience is number && data.yearsExperience >= 0 && data.yearsExperience <= 80
+        && data.skillsCount is int && data.skillsCount >= 0 && data.skillsCount <= 200
+        && data.measurableResults is int && data.measurableResults >= 0 && data.measurableResults <= 500
+        && data.wordCount is int && data.wordCount >= 0 && data.wordCount <= 50000
+        && data.strongestArea is string && data.strongestArea.size() >= 1 && data.strongestArea.size() <= 60
+        && data.weakestArea is string && data.weakestArea.size() >= 1 && data.weakestArea.size() <= 60
+        && data.prefix is string && data.prefix.size() <= 20
+        && data.status in ['new', 'shortlisted', 'reviewed', 'archived']
+        && data.notes is string && data.notes.size() <= 2000
+        && data.detectedSkills is list && data.detectedSkills.size() <= 80
+        && (data.detectedSkills.size() == 0 || data.detectedSkills[0] is string)
+        && data.breakdown is list && data.breakdown.size() <= 10
+        && (data.breakdown.size() == 0 || data.breakdown[0] is map)
+        && data.categoryCounts is list && data.categoryCounts.size() <= 10
+        && (data.categoryCounts.size() == 0 || data.categoryCounts[0] is map)
+        && data.matchedJobs is list && data.matchedJobs.size() <= 5
+        && (data.matchedJobs.size() == 0 || data.matchedJobs[0] is map)
+        && data.recommendedSkills is list && data.recommendedSkills.size() <= 15
+        && (data.recommendedSkills.size() == 0 || data.recommendedSkills[0] is map)
+        && data.tips is list && data.tips.size() <= 10
+        && (data.tips.size() == 0 || data.tips[0] is string)
+        && data.rawTextPreview is string && data.rawTextPreview.size() <= 2500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCustomRole(data, roleId) {
+      return data.keys().hasAll(['id', 'ownerId', 'title', 'skills', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerId', 'title', 'skills', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == roleId && isValidId(data.id)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 80
+        && data.skills is list && data.skills.size() >= 1 && data.skills.size() <= 20
+        && data.skills[0] is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Admins collection locked down (sole admin is verified pythonnmasterr@gmail.com)
+    match /admins/{adminId} {
+      allow read, write: if false;
+    }
+
+    // Users (Public-safe profile; owner-scoped plus admin read)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && (isOwner(userId) || isAdmin())
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']));
+      allow delete: if false;
+
+      // Isolated PII subcollection (readable by owner or sole admin)
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && docId == 'info' && (isOwner(userId) || isAdmin());
+        allow list: if false;
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming(), userId)
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'emailVerified', 'provider', 'lastSignInAt', 'updatedAt']);
+        allow delete: if false;
+      }
+    }
+
+    // Screenings (Saved screening batches)
+    match /screenings/{screeningId} {
+      allow get: if isSignedIn() && isValidId(screeningId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(screeningId)
+        && isValidScreening(incoming(), screeningId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(screeningId)
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && isValidScreening(incoming(), screeningId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'updatedAt']));
+      allow delete: if isVerifiedUser()
+        && isValidId(screeningId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+
+      // Candidate reports inside a screening (Master Gate via parent screening)
+      match /candidates/{candidateId} {
+        allow get: if isSignedIn()
+          && isValidId(screeningId)
+          && isValidId(candidateId)
+          && (
+            (existing().ownerId == request.auth.uid
+              && get(/databases/$(database)/documents/screenings/$(screeningId)).data.ownerId == request.auth.uid)
+            || isAdmin()
+          );
+        allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(screeningId)
+          && isValidId(candidateId)
+          && isValidCandidate(incoming(), screeningId, candidateId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && (
+            (exists(/databases/$(database)/documents/screenings/$(screeningId))
+              && get(/databases/$(database)/documents/screenings/$(screeningId)).data.ownerId == request.auth.uid)
+            || (existsAfter(/databases/$(database)/documents/screenings/$(screeningId))
+              && getAfter(/databases/$(database)/documents/screenings/$(screeningId)).data.ownerId == request.auth.uid)
+          );
+        allow update: if isVerifiedUser()
+          && isValidId(screeningId)
+          && isValidId(candidateId)
+          && (
+            (existing().ownerId == request.auth.uid
+              && existing().status != 'archived'
+              && get(/databases/$(database)/documents/screenings/$(screeningId)).data.ownerId == request.auth.uid)
+            || isAdmin()
+          )
+          && isValidCandidate(incoming(), screeningId, candidateId)
+          && incoming().id == existing().id
+          && incoming().screeningId == existing().screeningId
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin()
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'updatedAt']))
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt']))
+          );
+        allow delete: if isVerifiedUser()
+          && isValidId(screeningId)
+          && isValidId(candidateId)
+          && (existing().ownerId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Custom Target Roles
+    match /customRoles/{roleId} {
+      allow get: if isSignedIn() && isValidId(roleId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(roleId)
+        && isValidCustomRole(incoming(), roleId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(roleId)
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && isValidCustomRole(incoming(), roleId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'skills', 'updatedAt']));
+      allow delete: if isVerifiedUser()
+        && isValidId(roleId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}

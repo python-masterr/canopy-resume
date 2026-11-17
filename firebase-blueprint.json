@@ -1,0 +1,308 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user display profile without PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated private PII and account telemetry for an authenticated user (readable by owner and admin).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "emailVerified": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "lastSignInAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "Screening": {
+      "title": "Screening",
+      "description": "A saved resume screening session owned by a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "targetRole": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "candidateCount": {
+          "type": "number"
+        },
+        "averageScore": {
+          "type": "number"
+        },
+        "topSkills": {
+          "type": "array"
+        },
+        "topGaps": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "title",
+        "targetRole",
+        "candidateCount",
+        "averageScore",
+        "topSkills",
+        "topGaps",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Candidate": {
+      "title": "Candidate",
+      "description": "Screened resume candidate report inside a screening session.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "screeningId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "sourceFileName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "score": {
+          "type": "number"
+        },
+        "verdict": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "yearsExperience": {
+          "type": "number"
+        },
+        "skillsCount": {
+          "type": "number"
+        },
+        "measurableResults": {
+          "type": "number"
+        },
+        "wordCount": {
+          "type": "number"
+        },
+        "strongestArea": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "weakestArea": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "prefix": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "status": {
+          "type": "string",
+          "enum": ["new", "shortlisted", "reviewed", "archived"]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "detectedSkills": {
+          "type": "array"
+        },
+        "breakdown": {
+          "type": "array"
+        },
+        "categoryCounts": {
+          "type": "array"
+        },
+        "matchedJobs": {
+          "type": "array"
+        },
+        "recommendedSkills": {
+          "type": "array"
+        },
+        "tips": {
+          "type": "array"
+        },
+        "rawTextPreview": {
+          "type": "string",
+          "maxLength": 2500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "screeningId",
+        "ownerId",
+        "name",
+        "score",
+        "verdict",
+        "yearsExperience",
+        "skillsCount",
+        "measurableResults",
+        "wordCount",
+        "strongestArea",
+        "weakestArea",
+        "prefix",
+        "status",
+        "notes",
+        "detectedSkills",
+        "breakdown",
+        "categoryCounts",
+        "matchedJobs",
+        "recommendedSkills",
+        "tips",
+        "rawTextPreview",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomRole": {
+      "title": "CustomRole",
+      "description": "User-defined target job role and required skill checklist.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "skills": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerId", "title", "skills", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public-safe user profile documents indexed by Firebase Auth UID."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Private PII and account telemetry subcollection restricted to the owning user and sole admin."
+    },
+    "/screenings/{screeningId}": {
+      "schema": { "$ref": "#/entities/Screening" },
+      "description": "Saved resume screening sessions owned by users."
+    },
+    "/screenings/{screeningId}/candidates/{candidateId}": {
+      "schema": { "$ref": "#/entities/Candidate" },
+      "description": "Individual candidate analysis documents belonging to a parent screening."
+    },
+    "/customRoles/{roleId}": {
+      "schema": { "$ref": "#/entities/CustomRole" },
+      "description": "Custom target roles created by users for skill-gap matching."
+    }
+  }
+}

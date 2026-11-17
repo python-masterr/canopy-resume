@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Canopy – Resume screener with skill gap analysis</title>
+<style>
+:root{--bg:#eef3ea;--ink:#12261b;--mut:#55685c;--card:#fbfdf8;--line:#d3ddcf;--acc:#2c7a4b;--gold:#d9a02c;--bad:#b9482a;--h1:#5f9bb8;--h2:#2f7048;--h3:#0f2a1c;--on:#f6fbf3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1710;--ink:#e6f0e3;--mut:#9db3a4;--card:#12231a;--line:#26392d;--acc:#5fc388;--gold:#e6b448;--bad:#ee8a68;--h1:#4a3f86;--h2:#183a29;--h3:#08140d}}
+:root[data-theme="dark"]{--bg:#0b1710;--ink:#e6f0e3;--mut:#9db3a4;--card:#12231a;--line:#26392d;--acc:#5fc388;--gold:#e6b448;--bad:#ee8a68;--h1:#4a3f86;--h2:#183a29;--h3:#08140d}
+html{scroll-padding-top:env(safe-area-inset-top,0px);scroll-behavior:smooth}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Inter Display",Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.serif{font-family:"Bodoni MT",Didot,"Playfair Display",Georgia,serif;font-style:italic;font-weight:400}
+nav{position:absolute;top:env(safe-area-inset-top,0px);left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:18px clamp(16px,4vw,48px);color:var(--on);z-index:3}
+nav b{font-size:20px;letter-spacing:-.02em}
+nav div{display:flex;gap:18px;align-items:center;font-size:14px}
+nav a{text-decoration:none;opacity:.9}
+button{font:inherit;cursor:pointer}
+.pill{background:var(--on);color:#12261b;border:0;border-radius:99px;padding:10px 20px;font-weight:600;text-decoration:none;display:inline-block}
+.tog{background:none;border:1px solid #fff6;color:var(--on);border-radius:99px;padding:6px 12px;font-size:13px}
+.hero{position:relative;min-height:100svh;display:grid;place-items:center;text-align:center;color:var(--on);overflow:hidden;padding:110px 20px 70px;
+background:radial-gradient(ellipse 55% 50% at 50% 42%,var(--h1) 0,var(--h2) 62%,var(--h3) 100%)}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 18%,var(--h3) 0 9%,transparent 10%),radial-gradient(circle at 90% 25%,var(--h3) 0 11%,transparent 12%),radial-gradient(circle at 80% 92%,var(--h3) 0 14%,transparent 15%),radial-gradient(circle at 6% 88%,var(--h3) 0 12%,transparent 13%);opacity:.75}
+.leaf{position:absolute;top:-30px;width:14px;height:22px;border-radius:0 100% 0 100%;background:var(--gold);opacity:.8;animation:fall linear infinite}
+@keyframes fall{to{transform:translate(60px,110vh) rotate(540deg)}}
+.hero>div{position:relative;max-width:980px}
+h1{font-size:clamp(40px,8vw,96px);line-height:1;letter-spacing:-.035em;margin:0 0 22px;font-weight:600}
+h1 .serif{display:inline-block;transition:opacity .35s,transform .35s;color:var(--gold);padding-right:.05em}
+h1 .serif.out{opacity:0;transform:translateY(.25em)}
+.hero p{max-width:560px;margin:0 auto 28px;font-size:18px;opacity:.92}
+.hero .pill{background:var(--gold);color:#1b1405;margin:4px}
+.ghost{background:none!important;border:1px solid #fff8;color:var(--on)!important}
+section{padding:clamp(56px,9vw,120px) clamp(16px,4vw,48px);max-width:1200px;margin:0 auto}
+h2{font-size:clamp(30px,5vw,56px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;font-weight:600;max-width:760px}
+.lead{color:var(--mut);max-width:620px;margin:0 0 36px}
+.tool{display:grid;gap:16px}
+@media(max-width:820px){.tool{grid-template-columns:1fr}nav div a.hide{display:none}}
+.box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+label{font-weight:600;font-size:14px;display:flex;justify-content:space-between;margin-bottom:8px}
+label small{font-weight:400;color:var(--mut)}
+textarea{width:100%;height:300px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:12px;font:14px/1.5 ui-monospace,Menlo,Consolas,monospace}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center}
+.go{background:var(--acc);color:var(--on);border:0;border-radius:99px;padding:12px 26px;font-weight:600}
+.lnk{background:none;border:0;color:var(--acc);text-decoration:underline;padding:8px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:18px;text-align:center;display:grid;gap:6px;justify-items:center;margin-bottom:12px;transition:border-color .2s,background .2s}
+.drop.over{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.drop span{color:var(--mut);font-size:14px}
+.drop .go{padding:8px 20px;margin-top:4px}
+.files{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px}
+.files:empty{display:none}
+.files li{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:14px;border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px}
+.files li>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.files .st{color:var(--mut);font-size:13px;white-space:nowrap}
+.files .er{color:var(--bad);white-space:normal}
+.files button{background:none;border:0;color:var(--mut);font-size:20px;line-height:1;padding:2px 8px}
+#out{margin-top:36px}
+.cand{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:14px;display:grid;grid-template-columns:96px 1fr;gap:20px}
+@media(max-width:560px){.cand{grid-template-columns:1fr}}
+.ring{--p:0;width:92px;height:92px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--line) 0);transition:--p 1s}
+.ring span{width:72px;height:72px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:24px;font-weight:700}
+.cand h3{margin:0;font-size:20px;letter-spacing:-.01em}
+.cand .v{color:var(--mut);font-size:14px;margin:2px 0 12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.chip{font-size:13px;border-radius:99px;padding:3px 11px;border:1px solid var(--line)}
+.chip.ok{background:color-mix(in srgb,var(--acc) 16%,transparent);border-color:transparent}
+.chip.gap{border-color:var(--bad);color:var(--bad)}
+.chip.near{border-style:dashed}
+.sub{font-size:13px;color:var(--mut);margin:8px 0 2px}
+.met{display:flex;flex-wrap:wrap;gap:8px 26px;margin:0 0 12px;font-size:13px;color:var(--mut)}
+.met b{color:var(--ink);font-size:20px;display:block;line-height:1.2}
+.bars{display:grid;gap:6px;margin:6px 0 14px}
+.bar{display:grid;grid-template-columns:140px 1fr 48px;gap:10px;align-items:center;font-size:13px}
+.bar div{height:8px;border-radius:9px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:9px}
+.bar b{text-align:right;font-weight:500;color:var(--mut)}
+.tips{margin:6px 0 0;padding-left:18px;font-size:14px;color:var(--mut)}
+@media(max-width:560px){.bar{grid-template-columns:104px 1fr 44px}}
+.cand.one{grid-template-columns:1fr}
+.hl{display:flex;align-items:center;gap:22px;flex-wrap:wrap;border-radius:14px;padding:18px 24px;margin-bottom:16px;background:var(--c);color:var(--t)}
+.hl .big{font-size:clamp(56px,12vw,88px);line-height:1;font-weight:700;letter-spacing:-.04em}
+.hl .big small{font-size:.32em;font-weight:500;opacity:.8;letter-spacing:0}
+.hl b{font-size:20px;display:block}
+.hl span{opacity:.92;font-size:15px}
+.job{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0}
+.job.best{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 9%,transparent)}
+.jh{display:flex;justify-content:space-between;gap:10px;font-size:16px}
+.jh span{color:var(--mut);font-size:14px}
+.jb{height:6px;border-radius:9px;background:var(--line);margin:8px 0;overflow:hidden}
+.jb i{display:block;height:100%;background:var(--acc)}
+nav .tog{text-decoration:none;display:inline-block;opacity:1}
+@media(max-width:520px){nav .pill{display:none}}
+#login{position:fixed;inset:0;z-index:50;background:radial-gradient(ellipse at 50% 0,#1d3a2a 0,#0e1a13 55%,#0a110d 100%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(64px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px));overflow:auto}
+#login[hidden]{display:none}
+.back{position:absolute;top:calc(18px + env(safe-area-inset-top,0px));left:20px;color:#cfe0d5;font-size:14px}
+.lc{width:100%;max-width:384px;border-radius:24px;background:linear-gradient(to right,#ffffff12,#0e1a13);backdrop-filter:blur(6px);box-shadow:0 25px 50px #0008;padding:32px;display:flex;flex-direction:column;align-items:center}
+.lc .logo{width:48px;height:48px;border-radius:50%;background:#ffffff26;display:grid;place-items:center;margin-bottom:20px}
+.lc h2{font-size:24px;margin:0 0 4px;text-align:center;letter-spacing:-.02em}
+.lc .sm{color:#b9c9bf;font-size:14px;margin:0 0 20px;text-align:center}
+.lc form{width:100%;display:grid;gap:12px}
+.lc input{width:100%;padding:12px 20px;border-radius:12px;border:0;background:#ffffff1a;color:#fff;font:inherit;font-size:14px}
+.lc input::placeholder{color:#c3d0c8}
+.lc input:focus-visible{outline:2px solid #9bd8b2;outline-offset:1px}
+.lc .err{color:#ff9e86;font-size:14px}
+.lc .err:empty{display:none}
+.lc hr{border:0;border-top:1px solid #ffffff1a;width:100%;margin:4px 0}
+.lb{width:100%;border:0;border-radius:99px;padding:12px 20px;font-weight:500;font-size:14px;color:#fff;background:#ffffff1a}
+.lb:hover{background:#ffffff33}
+.lb.g{background:linear-gradient(#232526,#2d2e30);display:flex;gap:8px;align-items:center;justify-content:center}
+.lb.g:hover{filter:brightness(1.2)}
+.lc .alt{font-size:12px;color:#aebfb5;text-align:center;margin-top:12px}
+.lc .alt button{background:none;border:0;color:#fff;text-decoration:underline;font:inherit;padding:0}
+.lx{margin-top:36px;text-align:center;color:#aebfb5;font-size:14px;max-width:340px}
+.faces{display:flex;justify-content:center;margin-top:10px}
+.faces span{width:32px;height:32px;border-radius:50%;border:2px solid #0e1a13;margin-left:-8px;display:grid;place-items:center;font-size:12px;font-weight:600;color:#10261a}
+.faces span:first-child{margin-left:0}
+.pool{background:var(--h3);color:var(--on);border-radius:18px;padding:20px;margin-bottom:14px}
+.pool .chip{border-color:#fff5;color:var(--on)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:820px){.steps{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.steps{grid-template-columns:1fr}}
+.step{border-top:2px solid var(--acc);padding-top:14px}
+.step i{display:block;width:calc(14px + var(--n)*7px);height:calc(14px + var(--n)*7px);border-radius:0 100% 0 100%;background:var(--acc);margin-bottom:14px}
+.step b{font-size:20px;display:block}
+.step p{color:var(--mut);margin:6px 0 0;font-size:15px}
+details{border-bottom:1px solid var(--line);padding:16px 0}
+summary{font-weight:600;cursor:pointer;font-size:18px}
+details p{color:var(--mut);margin:8px 0 0;max-width:680px}
+footer{background:var(--h3);color:var(--on);text-align:center;padding:60px 20px 40px}
+footer .big{font-size:clamp(60px,18vw,220px);line-height:.9;letter-spacing:-.05em;font-weight:600;opacity:.9}
+footer p{opacity:.7;font-size:14px}
+@media(prefers-reduced-motion:reduce){.leaf{display:none}h1 .serif{transition:none}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <nav aria-label="Main"><b>Canopy</b><div><a class="hide" href="#try">Try it</a><a class="hide" href="#how">How it works</a><a class="hide" href="#faq">FAQ</a><a class="tog" id="si" href="#login">Sign in</a><button class="tog" id="tog" type="button">Dusk</button><a class="pill" href="#try">Screen resumes</a></div></nav>
+  <div>
+    <h1>Screen resumes for <span class="serif" id="w">Engineers</span><br>and see every skill gap.</h1>
+    <p>Upload resumes and Canopy scores each one, suggests the jobs it fits, and tells you which skills to learn to land them.</p>
+    <a class="pill" href="#try">Screen resumes</a><a class="pill ghost" href="#how">How it works</a>
+  </div>
+</header>
+
+<section id="try">
+  <h2>Try the screener</h2>
+  <p class="lead">Everything runs in your browser. Nothing is uploaded. Add PDF, DOCX or TXT files, or paste text and separate resumes with a line containing only <code>---</code>.</p>
+  <div class="tool">
+    <div class="box"><label for="rs">Resumes <small>upload or paste</small></label>
+      <div class="drop" id="drop"><b>Drop resumes here</b><span>PDF, DOCX or TXT, up to 20 files. Read in your browser.</span><button class="go" id="pick" type="button">Choose files</button><input type="file" id="fin" hidden multiple accept=".pdf,.docx,.txt,.md"></div>
+      <ul class="files" id="files" aria-live="polite"></ul>
+      <textarea id="rs" spellcheck="false" style="height:140px" placeholder="Or paste resume text here"></textarea></div>
+  </div>
+  <div class="row"><button class="go" id="run" type="button">Analyze resumes</button><button class="lnk" id="demo" type="button">Load sample resumes</button><button class="lnk" id="clr" type="button">Clear</button></div>
+  <div id="out" aria-live="polite"></div>
+</section>
+
+<section id="how">
+  <h2>From a pile of PDFs to a short list</h2>
+  <p class="lead">Four steps, each one a little taller than the last.</p>
+  <div class="steps">
+    <div class="step" style="--n:1"><i></i><b>Read</b><p>Canopy reads each resume and pulls out contact details, sections, years of experience and results.</p></div>
+    <div class="step" style="--n:2"><i></i><b>Detect</b><p>Skills are matched against a library of about 60 tools, including aliases like k8s for Kubernetes.</p></div>
+    <div class="step" style="--n:3"><i></i><b>Rank</b><p>Each resume gets a score out of 100 with a breakdown, and the pool is ranked.</p></div>
+    <div class="step" style="--n:4"><i></i><b>Grow</b><p>Canopy suggests jobs that fit the skills found, and the skills to learn to qualify for them.</p></div>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>Questions</h2>
+  <details><summary>How is the score calculated?</summary><p>Out of 100: skills breadth 30, resume sections 20, experience 15, measurable results 15, action verbs 10 and contact info 10.</p></details>
+  <details><summary>How are skill gaps found?</summary><p>Canopy looks at the areas where a resume is strongest, such as frontend or cloud, and lists related skills that are missing from it.</p></details>
+  <details><summary>Is my data sent anywhere?</summary><p>No. Screening runs entirely in this page, so resumes never leave your device.</p></details>
+  <details><summary>Can it replace a human reviewer?</summary><p>No. It is a first pass that surfaces evidence. Keyword matching can miss skills described in other words, so review the short list yourself.</p></details>
+  <details><summary>How are job suggestions made?</summary><p>Each role has a core skill set. Canopy compares it with the skills on the resume and shows the three closest roles, with the missing skills as your learning list.</p></details>
+</section>
+
+<footer><div class="big serif">Canopy</div><p>Screen with evidence. Hire with context.</p></footer>
+
+<div id="login" hidden role="dialog" aria-modal="true" aria-labelledby="lt">
+  <a class="back" href="#try">← Back to Canopy</a>
+  <div class="lc">
+    <div class="logo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19c0-8 5-14 14-14 0 9-6 14-14 14z"/><path d="M5 19 14 10"/></svg></div>
+    <h2 id="lt">Welcome back</h2>
+    <p class="sm" id="ls">Sign in to keep your screenings in one place.</p>
+    <form id="lf" novalidate>
+      <input id="ln" type="text" placeholder="Full name" autocomplete="name" aria-label="Full name" hidden>
+      <input id="le" type="email" placeholder="Email" autocomplete="email" aria-label="Email">
+      <input id="lp" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
+      <div class="err" id="lerr" role="alert"></div>
+      <hr>
+      <button class="lb" id="lsub" type="submit">Sign in</button>
+      <button class="lb g" id="lg" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.8-2.1 15.7-5.7l-7.5-5.8c-2.1 1.4-4.8 2.3-8.2 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Continue with Google</button>
+    </form>
+    <div class="alt"><span id="lalt">Don’t have an account?</span> <button id="lsw" type="button">Sign up, it’s free</button></div>
+    <div class="alt">Demo sign-in: nothing is sent anywhere.</div>
+  </div>
+  <div class="lx">Join recruiters and hiring teams who screen resumes with Canopy.
+    <div class="faces" aria-hidden="true"><span style="background:#9bd8b2">M</span><span style="background:#e6b448">D</span><span style="background:#8fb7e8">P</span><span style="background:#e9a2b6">A</span></div></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const CATS={
+"Languages":"javascript|js|ecmascript;typescript;python;java;c#|csharp;golang;rust;php;ruby;sql|postgresql|mysql",
+"Frontend":"react|reactjs|react.js;vue|vue.js;angular;next.js|nextjs;html;css|sass|tailwind;redux",
+"Backend":"node.js|nodejs|node;express;django;flask;spring boot|spring framework;graphql;rest api|rest apis|restful;microservices",
+"Cloud and DevOps":"aws|amazon web services;azure;gcp|google cloud;docker;kubernetes|k8s;terraform;ci/cd|jenkins|github actions;linux",
+"Data and ML":"machine learning;tensorflow;pytorch;pandas;data analysis;tableau;power bi;spark;nlp;statistics",
+"Practice":"git;agile|scrum;jira;leadership|mentoring|team lead;communication;testing|jest|cypress|unit testing;figma;seo;excel;project management"};
+const SK=[];for(const c in CATS)CATS[c].split(";").forEach(s=>{const a=s.split("|");SK.push({name:a[0],cat:c,al:a})});
+const re=a=>new RegExp("(^|[^a-z0-9+#])"+a.replace(/[.*+?^${}()|[\]\\\/]/g,"\\$&")+"(?![a-z0-9+#])");
+SK.forEach(s=>s.re=s.al.map(re));
+const find=t=>{t=t.toLowerCase();return SK.filter(s=>s.re.some(r=>r.test(t)))};
+const years=(t,max)=>{const m=[...t.matchAll(/(\d{1,2})\+?\s*(?:years|yrs)/gi)].map(x=>+x[1]);return m.length?(max?Math.max(...m):m[0]):0};
+
+const VERBS="led,built,designed,developed,launched,managed,improved,reduced,increased,created,delivered,implemented,optimized,migrated,automated,mentored,architected,deployed,analyzed,drove,owned,scaled,shipped,established,collaborated".split(",");
+const SECT={Summary:/\b(summary|profile|objective|about me)\b/,Experience:/\b(experience|employment|work history)\b/,Education:/\b(education|university|college|b\.?tech|bachelor|master)\b/,Skills:/\b(skills|technologies|tech stack|tools)\b/,Projects:/\b(projects|certifications?|achievements)\b/};
+const ROLES=[
+{t:"Frontend Developer",s:["javascript","typescript","react","html","css","git","testing","redux"]},
+{t:"Full Stack Developer",s:["javascript","typescript","react","node.js","sql","rest api","docker","git"]},
+{t:"Backend Engineer",s:["node.js","python","sql","rest api","microservices","docker","git","aws"]},
+{t:"DevOps Engineer",s:["linux","docker","kubernetes","terraform","ci/cd","aws","git","python"]},
+{t:"Cloud Engineer",s:["aws","azure","gcp","terraform","docker","kubernetes","linux"]},
+{t:"Data Analyst",s:["sql","excel","tableau","power bi","python","pandas","statistics","data analysis"]},
+{t:"Data Scientist",s:["python","pandas","machine learning","statistics","sql","tensorflow","pytorch","nlp"]},
+{t:"Machine Learning Engineer",s:["python","machine learning","pytorch","tensorflow","docker","aws","git","sql"]},
+{t:"UI/UX Designer",s:["figma","html","css","communication","agile","project management"]},
+{t:"Project Manager",s:["project management","agile","jira","leadership","communication","excel"]},
+{t:"Digital Marketer",s:["seo","excel","data analysis","communication","project management"]}];
+function span(t){const a=[],b=[],y=new Date().getFullYear();for(const m of t.matchAll(/\b((?:19|20)\d{2})\s*(?:-|–|—|to)\s*((?:19|20)\d{2}|present|current|now)\b/gi)){a.push(+m[1]);b.push(/\d/.test(m[2])?+m[2]:y)}return a.length?Math.max(0,Math.max(...b)-Math.min(...a)):0}
+function profile(c){
+  const t=c.text,low=t.toLowerCase(),sk=find(t),words=t.split(/\s+/).length;
+  const yrs=Math.max(years(t,true),span(t));
+  const sec=Object.keys(SECT).filter(k=>SECT[k].test(low));
+  const email=/[\w.+-]+@[\w-]+\.[\w.]+/.test(t),phone=/\+?\d[\d\s().-]{8,}\d/.test(t),link=/linkedin\.com|github\.com|portfolio/i.test(t);
+  const mets=(t.match(/\d+(?:\.\d+)?\s*(?:%|k\b|m\b|x\b)|[$₹€£]\s?\d/gi)||[]).length;
+  const verbs=VERBS.filter(v=>new RegExp("\\b"+v+"\\b").test(low)).length;
+  const bd=[["Skills breadth",Math.min(30,sk.length*3),30],["Experience",Math.min(15,Math.round(yrs*3)),15],["Resume sections",sec.length*4,20],["Contact info",(email?5:0)+(phone?3:0)+(link?2:0),10],["Measurable results",Math.min(15,mets*3),15],["Action verbs",Math.min(10,Math.round(verbs*1.5)),10]];
+  const score=bd.reduce((n,x)=>n+x[1],0);
+  const cnt={};sk.forEach(x=>cnt[x.cat]=(cnt[x.cat]||0)+1);
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>x[0]);
+  const learn=SK.filter(x=>top.includes(x.cat)&&!sk.includes(x)).slice(0,6);
+  const tips=[];
+  if(!sk.length)tips.push("No known skills were detected. List specific tools and technologies.");
+  else if(sk.length<6)tips.push("List more specific tools and technologies.");
+  if(!email)tips.push("Add an email address so recruiters can reach you.");
+  if(!phone)tips.push("Add a phone number.");
+  if(!link)tips.push("Link your LinkedIn, GitHub or portfolio.");
+  Object.keys(SECT).filter(k=>!sec.includes(k)).forEach(k=>tips.push("Add a "+k.toLowerCase()+" section."));
+  if(mets<3)tips.push("Quantify results with numbers, such as “cut load time by 40%”.");
+  if(verbs<5)tips.push("Start bullets with action verbs like built, led or reduced.");
+  if(words<150)tips.push("The resume is short. Add detail on responsibilities and results.");
+  if(words>1000)tips.push("The resume is long. Aim for one or two pages.");
+  const have=new Set(sk.map(x=>x.name));
+  const pre=yrs>=6?"Senior ":yrs>=3?"":"Junior ";
+  const jobs=ROLES.map(r=>{const ok=r.s.filter(n=>have.has(n));return{t:r.t,pct:Math.round(ok.length/r.s.length*100),ok,miss:r.s.filter(n=>!have.has(n))}}).sort((a,b)=>b.pct-a.pct||a.miss.length-b.miss.length).slice(0,3).filter(j=>j.pct>=25);
+  const rec=[];jobs.forEach((j,i)=>j.miss.slice(0,i?2:5).forEach(n=>{if(!rec.some(r=>r.n===n))rec.push({n,t:j.t})}));
+  const rs=bd.map(x=>[x[0],x[1]/x[2]]).sort((a,b)=>b[1]-a[1]);
+  return{name:c.name,sk,words,yrs,mets,bd,score,cnt,top,learn,tips,pre,jobs,rec,strong:rs[0][0],weak:rs[rs.length-1][0]};
+}
+function gather(){
+  const r=[],raw=$("#rs").value.trim();
+  if(raw)raw.split(/^\s*---+\s*$/m).map(x=>x.trim()).filter(Boolean).forEach((t,i)=>{const f=t.split("\n")[0].trim();r.push({name:f.length<=40?f:"Candidate "+(i+1),text:t})});
+  FILES.filter(f=>f.text).forEach(f=>r.push({name:f.name,text:f.text}));
+  return r;
+}
+function analyze(){
+  const out=$("#out");
+  if(FILES.some(f=>f.status.startsWith("Reading"))){out.innerHTML='<div class="box">Files are still being read. Try again in a moment.</div>';return}
+  const list=gather().map(profile).sort((a,b)=>b.score-a.score);
+  if(!list.length){out.innerHTML='<div class="box">Add at least one resume. Upload a file or paste the text above.</div>';return}
+  const avg=Math.round(list.reduce((n,c)=>n+c.score,0)/list.length);
+  const tl={},tg={};list.forEach(c=>{c.sk.forEach(x=>tl[x.name]=(tl[x.name]||0)+1);c.rec.forEach(x=>tg[x.n]=(tg[x.n]||0)+1)});
+  const best=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  let h=`<div class="pool"><b>Pool overview</b><div class="sub" style="color:inherit;opacity:.75">${list.length} resume${list.length>1?"s":""} analyzed · average score ${avg}/100</div>
+  <div class="sub" style="color:inherit;opacity:.75">Most common skills</div><div class="chips">${best(tl).map(([n,c])=>`<span class="chip">${esc(n)} · ${c}</span>`).join("")||'<span class="chip">None detected</span>'}</div>
+  <div class="sub" style="color:inherit;opacity:.75">Skills most candidates should learn</div><div class="chips">${best(tg).map(([n,c])=>`<span class="chip">${esc(n)} · ${c}</span>`).join("")||'<span class="chip">None</span>'}</div></div>`;
+  list.forEach((c,i)=>{
+    const col=c.score>=75?"#2c7a4b":c.score>=50?"#d9a02c":"#b9482a",tc=c.score>=50&&c.score<75?"#1b1405":"#fff";
+    const v=c.score>=75?"Strong resume":c.score>=50?"Good, with room to grow":"Needs work";
+    const cats=Object.keys(CATS).map(k=>[k,c.cnt[k]||0,CATS[k].split(";").length]);
+    h+=`<article class="cand one"><div><div class="hl" style="--c:${col};--t:${tc}"><div class="big">${c.score}<small>/100</small></div><div><b>${v}${list.length>1?" · rank "+(i+1):""}</b><span>${esc(c.name)}. Strongest area: ${c.strong.toLowerCase()}. Biggest gain: ${c.weak.toLowerCase()}.</span></div></div>
+    <div class="met"><span><b>${c.yrs||"–"}</b>years found</span><span><b>${c.sk.length}</b>skills</span><span><b>${c.mets}</b>measurable results</span><span><b>${c.words}</b>words</span></div>
+    <div class="sub">Jobs you can aim for</div>${c.jobs.map((j,k)=>`<div class="job ${k?"":"best"}"><div class="jh"><b>${esc(c.pre+j.t)}</b><span>${k?"":"Best match · "}${j.pct}% match</span></div><div class="jb"><i style="width:${j.pct}%"></i></div><div class="chips">${j.ok.map(n=>`<span class="chip ok">${esc(n)}</span>`).join("")}${j.miss.map(n=>`<span class="chip gap">${esc(n)}</span>`).join("")}</div></div>`).join("")||'<div class="sub">Not enough skills were detected to suggest a role. List the tools you use and analyze again.</div>'}
+    <div class="sub">Skills to learn next</div>${c.rec.length?`<ul class="tips">${c.rec.map(x=>`<li><b style="color:var(--ink)">${esc(x.n)}</b> for ${esc(x.t)}</li>`).join("")}</ul>`:'<div class="sub">Nothing missing for the closest roles.</div>'}
+    <div class="sub">Score breakdown</div><div class="bars">${c.bd.map(x=>`<div class="bar"><span>${x[0]}</span><div><i style="width:${x[1]/x[2]*100}%"></i></div><b>${x[1]}/${x[2]}</b></div>`).join("")}</div>
+    <div class="sub">Skills by area</div><div class="bars">${cats.map(x=>`<div class="bar"><span>${esc(x[0])}</span><div><i style="width:${x[1]/x[2]*100}%;background:var(--gold)"></i></div><b>${x[1]}/${x[2]}</b></div>`).join("")}</div>
+    ${c.tips.length?`<div class="sub">How to improve this resume</div><ul class="tips">${c.tips.slice(0,6).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}</div></article>`;
+  });
+  out.innerHTML=h;out.scrollIntoView({behavior:"smooth",block:"start"});
+}
+const SAMPLE_RS="Maya Rao\nmaya.rao@email.com | +91 98765 43210 | linkedin.com/in/mayarao\nSummary\nFrontend engineer with 7 years of experience.\nExperience\nSenior Engineer, Lumen 2019 - Present\n- Built React and TypeScript dashboards used by 40k users and cut load time by 38%.\n- Led a team of 4, mentored juniors and shipped CI/CD pipelines on AWS with Docker.\nEducation\nB.Tech Computer Science, 2017\nSkills\nReact, TypeScript, Redux, Jest, GraphQL, AWS, Docker, Git, Agile\n---\nDaniel Kim\n3 years as a developer. Vue.js, JavaScript, Node.js, Express, REST. Worked on websites.\n---\nPriya Nair\npriya@email.com\nExperience 2018 - 2024\nAnalyzed sales data with Python, pandas, SQL and Tableau, improving forecast accuracy by 22%. Built machine learning models with PyTorch.\nSkills\nStatistics, Excel, Python, SQL";
+$("#demo").onclick=()=>{$("#rs").value=SAMPLE_RS;analyze()};
+$("#clr").onclick=()=>{$("#rs").value=$("#out").innerHTML="";FILES.length=0;renderFiles()};
+// upload portal
+const FILES=[],libs={},CDN="https://cdnjs.cloudflare.com/ajax/libs/";
+const loadJS=src=>libs[src]||(libs[src]=new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=()=>{delete libs[src];rej(new Error("Could not load the file reader. Check your connection."))};document.head.appendChild(s)}));
+async function readFile(f){
+  const ext=(f.name.split(".").pop()||"").toLowerCase();
+  if(ext==="txt"||ext==="md")return f.text();
+  if(ext==="pdf"){
+    await loadJS(CDN+"pdf.js/3.11.174/pdf.min.js");await loadJS(CDN+"pdf.js/3.11.174/pdf.worker.min.js");
+    pdfjsLib.GlobalWorkerOptions.workerSrc=CDN+"pdf.js/3.11.174/pdf.worker.min.js";
+    const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+    let t="";for(let p=1;p<=pdf.numPages;p++){const c=await(await pdf.getPage(p)).getTextContent();t+=c.items.map(i=>i.str+(i.hasEOL?"\n":" ")).join("")+"\n"}
+    return t;
+  }
+  if(ext==="docx"){await loadJS(CDN+"mammoth/1.6.0/mammoth.browser.min.js");return (await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()})).value}
+  throw new Error(ext==="doc"?"Old .doc files are not supported. Save as DOCX or PDF.":"Unsupported type. Use PDF, DOCX or TXT.");
+}
+function renderFiles(){
+  $("#files").innerHTML=FILES.map((e,i)=>`<li><span title="${esc(e.file)}">${esc(e.file)}</span><span class="st ${e.err?"er":""}">${esc(e.status)}</span><button type="button" data-i="${i}" aria-label="Remove ${esc(e.file)}">×</button></li>`).join("");
+}
+async function addFiles(list){
+  for(const f of [...list].slice(0,20)){
+    const e={name:f.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ").trim().slice(0,40)||"Resume",file:f.name,status:"Reading…",text:""};
+    FILES.push(e);renderFiles();
+    try{const t=(await readFile(f)).replace(/[ \t]+\n/g,"\n").trim();
+      if(!t)throw new Error("No text found. Scanned PDFs need OCR.");
+      e.text=t;e.status="Ready · "+t.split(/\s+/).length+" words"}
+    catch(x){e.err=true;e.status=x.message||"Could not read file"}
+    renderFiles();
+  }
+}
+$("#files").onclick=e=>{const b=e.target.closest("button");if(b){FILES.splice(+b.dataset.i,1);renderFiles()}};
+const fin=$("#fin"),dz=$("#drop");
+$("#pick").onclick=()=>fin.click();
+fin.onchange=()=>{addFiles(fin.files);fin.value=""};
+["dragenter","dragover"].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.add("over")}));
+["dragleave","drop"].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.remove("over")}));
+dz.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
+$("#run").onclick=analyze;
+// login
+const L=$("#login"),lf=$("#lf"),lerr=$("#lerr");let signup=false;
+const store={get(){try{return JSON.parse(localStorage.getItem("canopy-user")||"null")}catch(e){return null}},set(v){try{v?localStorage.setItem("canopy-user",JSON.stringify(v)):localStorage.removeItem("canopy-user")}catch(e){}}};
+let user=store.get();
+function renderUser(){const b=$("#si");b.textContent=user?"Sign out ("+user.name+")":"Sign in";b.setAttribute("href",user?"#try":"#login")}
+function route(){const on=location.hash==="#login"&&!user;L.hidden=!on;document.body.style.overflow=on?"hidden":"";if(on)setTimeout(()=>$(signup?"#ln":"#le").focus(),0)}
+function mode(s){signup=s;$("#ln").hidden=!s;$("#lt").textContent=s?"Create your account":"Welcome back";$("#ls").textContent=s?"Start screening resumes in a minute.":"Sign in to keep your screenings in one place.";$("#lsub").textContent=s?"Create account":"Sign in";$("#lalt").textContent=s?"Already have an account?":"Don’t have an account?";$("#lsw").textContent=s?"Sign in":"Sign up, it’s free";$("#lp").autocomplete=s?"new-password":"current-password";lerr.textContent=""}
+$("#lsw").onclick=()=>{mode(!signup);$(signup?"#ln":"#le").focus()};
+$("#lg").onclick=()=>{lerr.textContent="Google sign-in needs a server connection. This demo supports email only."};
+$("#si").onclick=e=>{if(user){user=null;store.set(null);renderUser()}};
+lf.onsubmit=e=>{e.preventDefault();const em=$("#le").value.trim(),pw=$("#lp").value,nm=$("#ln").value.trim();
+  if(!em||!pw||(signup&&!nm)){lerr.textContent=signup?"Please enter your name, email and password.":"Please enter both email and password.";return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){lerr.textContent="Please enter a valid email address.";return}
+  if(signup&&pw.length<8){lerr.textContent="Use at least 8 characters for your password.";return}
+  user={name:signup?nm.split(" ")[0]:em.split("@")[0],email:em};store.set(user);lf.reset();lerr.textContent="";renderUser();location.hash="try"};
+addEventListener("hashchange",route);
+addEventListener("keydown",e=>{if(e.key==="Escape"&&!L.hidden)location.hash="try"});
+renderUser();route();
+// morphing word
+const words=["Engineers","Designers","Analysts","Marketers","Founders"];let wi=0;const w=$("#w");
+if(!matchMedia("(prefers-reduced-motion:reduce)").matches)setInterval(()=>{w.classList.add("out");setTimeout(()=>{wi=(wi+1)%words.length;w.textContent=words[wi];w.classList.remove("out")},350)},2800);
+// drifting leaves
+const hero=document.querySelector(".hero");
+for(let i=0;i<9;i++){const l=document.createElement("span");l.className="leaf";l.style.cssText=`left:${Math.random()*95}%;animation-duration:${9+Math.random()*9}s;animation-delay:-${Math.random()*14}s;transform:scale(${.6+Math.random()*.8})`;hero.appendChild(l)}
+// theme
+const tg=$("#tog"),root=document.documentElement;
+const dark=()=>root.dataset.theme?root.dataset.theme==="dark":matchMedia("(prefers-color-scheme:dark)").matches;
+const lab=()=>tg.textContent=dark()?"Daylight":"Dusk";lab();
+tg.onclick=()=>{root.dataset.theme=dark()?"light":"dark";lab()};
+</script>
+</body>
+</html>

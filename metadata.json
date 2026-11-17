@@ -1,0 +1,6 @@
+{
+  "name": "Canopy",
+  "description": "Resume screener with skill gap analysis, candidate ranking, and persistent screening workspaces.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

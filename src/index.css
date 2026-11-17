@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
+:root {
+  --bg: #eef3ea;
+  --ink: #12261b;
+  --mut: #55685c;
+  --card: #fbfdf8;
+  --line: #d3ddcf;
+  --acc: #2c7a4b;
+  --gold: #d9a02c;
+  --bad: #b9482a;
+  --h1: #5f9bb8;
+  --h2: #2f7048;
+  --h3: #0f2a1c;
+  --on: #f6fbf3;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b1710;
+  --ink: #e6f0e3;
+  --mut: #9db3a4;
+  --card: #12231a;
+  --line: #26392d;
+  --acc: #5fc388;
+  --gold: #e6b448;
+  --bad: #ee8a68;
+  --h1: #4a3f86;
+  --h2: #183a29;
+  --h3: #08140d;
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif-editorial {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.font-mono-tabular {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.canopy-hero {
+  background: radial-gradient(ellipse 55% 50% at 50% 42%, var(--h1) 0, var(--h2) 62%, var(--h3) 100%);
+}
+
+.canopy-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 18%, var(--h3) 0 9%, transparent 10%),
+    radial-gradient(circle at 90% 25%, var(--h3) 0 11%, transparent 12%),
+    radial-gradient(circle at 80% 92%, var(--h3) 0 14%, transparent 15%),
+    radial-gradient(circle at 6% 88%, var(--h3) 0 12%, transparent 13%);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.canopy-leaf {
+  position: absolute;
+  top: -30px;
+  width: 14px;
+  height: 22px;
+  border-radius: 0 100% 0 100%;
+  background: var(--gold);
+  opacity: 0.8;
+  pointer-events: none;
+  animation: canopy-fall linear infinite;
+}
+
+@keyframes canopy-fall {
+  to {
+    transform: translate(60px, 110vh) rotate(540deg);
+  }
+}
+
+.canopy-step-leaf {
+  border-radius: 0 100% 0 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canopy-leaf {
+    display: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
