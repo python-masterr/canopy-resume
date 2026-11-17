@@ -7,6 +7,7 @@
 4. **Immutable Ownership & Timestamps**: `ownerId`, `id`, `screeningId`, and `createdAt` are immutable after creation. All `createdAt` and `updatedAt` timestamps must strictly equal `request.time`.
 5. **Bounded Arrays & Strict Keys**: Every collection enforces `keys().hasAll(...)` and `keys().hasOnly(...)` on create, `diff().affectedKeys().hasOnly(...)` on update, and `.size()` limits on all strings, IDs, and arrays.
 6. **Sole Admin RBAC**: Only the verified sole administrator (`pythonnmasterr@gmail.com` with `email_verified == true`) has admin read/moderation privileges. `/admins` delegation is locked down (`allow read, write: if false`).
+7. **Tracker & Resume History Isolation**: Every `/applications/{applicationId}` and `/resumeVersions/{versionId}` document enforces strict `ownerId == request.auth.uid` on read, list, create, update, and delete, with `isVerifiedUser()`, bounded sizes, and `request.time` timestamp integrity.
 
 ## 2. The "Dirty Dozen" Adversarial Payloads
 1. **Shadow Field Injection on Screening Create**: Payload includes `isAdmin: true` -> Rejected by `hasOnly(...)`.

@@ -166,8 +166,8 @@ export function ScoreHistogram({
         </div>
       </div>
 
-      <div className="h-44 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-44 w-full min-w-0">
+        <ResponsiveContainer width="100%" height={176} minWidth={0}>
           <BarChart
             data={bins}
             margin={{ top: 8, right: 6, left: -22, bottom: 0 }}

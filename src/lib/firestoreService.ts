@@ -598,3 +598,256 @@ export async function deleteScreeningAdmin(screeningId: string): Promise<void> {
   }
 }
 
+export function formatFirestoreError(err: unknown, fallback = 'Operation failed.'): string {
+  const raw = err instanceof Error ? err.message : String(err || fallback);
+  try {
+    const parsed = JSON.parse(raw) as { error?: string };
+    return parsed.error || fallback;
+  } catch {
+    return raw || fallback;
+  }
+}
+
+// --- Job Application Tracker (/applications) ---
+
+export type ApplicationStatus = 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected';
+
+export interface JobApplicationRecord {
+  id: string;
+  ownerId: string;
+  company: string;
+  role: string;
+  status: ApplicationStatus;
+  atsScore: number;
+  jobUrl?: string;
+  appliedDate?: string;
+  notes: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
+export function subscribeApplications(
+  ownerId: string,
+  onData: (items: JobApplicationRecord[]) => void,
+  onError: (err: Error) => void,
+): Unsubscribe {
+  const path = 'applications';
+  const q = query(collection(db, path), where('ownerId', '==', ownerId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const records = snapshot.docs
+        .map((d) => d.data() as JobApplicationRecord)
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+      onData(records);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped instanceof Error ? wrapped : new Error(String(wrapped)));
+      }
+    },
+  );
+}
+
+export async function createApplication(
+  ownerId: string,
+  input: {
+    company: string;
+    role: string;
+    status: ApplicationStatus;
+    atsScore: number;
+    jobUrl?: string;
+    appliedDate?: string;
+    notes?: string;
+  },
+): Promise<string> {
+  const appId = makeSafeId('app');
+  const path = `applications/${appId}`;
+  const company = input.company.trim().slice(0, 120);
+  const role = input.role.trim().slice(0, 120);
+  if (!company || !role) {
+    throw new Error('Company and role are required.');
+  }
+
+  const payload: Record<string, unknown> = {
+    id: appId,
+    ownerId,
+    company,
+    role,
+    status: input.status,
+    atsScore: Math.min(100, Math.max(0, Math.round(Number(input.atsScore) || 0))),
+    notes: (input.notes || '').trim().slice(0, 2000),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const cleanUrl = (input.jobUrl || '').trim().slice(0, 500);
+  if (cleanUrl) payload.jobUrl = cleanUrl;
+  const cleanDate = (input.appliedDate || '').trim().slice(0, 40);
+  if (cleanDate) payload.appliedDate = cleanDate;
+
+  try {
+    await setDoc(doc(db, 'applications', appId), payload);
+    return appId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function updateApplication(
+  applicationId: string,
+  updates: {
+    company?: string;
+    role?: string;
+    status?: ApplicationStatus;
+    atsScore?: number;
+    jobUrl?: string;
+    appliedDate?: string;
+    notes?: string;
+  },
+): Promise<void> {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(applicationId)) {
+    throw new Error('Invalid application ID.');
+  }
+  const path = `applications/${applicationId}`;
+  const payload: Record<string, unknown> = {
+    updatedAt: serverTimestamp(),
+  };
+  if (updates.company !== undefined) {
+    const cleanCompany = updates.company.trim().slice(0, 120);
+    if (cleanCompany) payload.company = cleanCompany;
+  }
+  if (updates.role !== undefined) {
+    const cleanRole = updates.role.trim().slice(0, 120);
+    if (cleanRole) payload.role = cleanRole;
+  }
+  if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.atsScore !== undefined) {
+    payload.atsScore = Math.min(100, Math.max(0, Math.round(Number(updates.atsScore) || 0)));
+  }
+  if (updates.jobUrl !== undefined) payload.jobUrl = updates.jobUrl.trim().slice(0, 500);
+  if (updates.appliedDate !== undefined) payload.appliedDate = updates.appliedDate.trim().slice(0, 40);
+  if (updates.notes !== undefined) payload.notes = updates.notes.slice(0, 2000);
+
+  try {
+    await updateDoc(doc(db, 'applications', applicationId), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteApplication(applicationId: string): Promise<void> {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(applicationId)) {
+    throw new Error('Invalid application ID.');
+  }
+  const path = `applications/${applicationId}`;
+  try {
+    await deleteDoc(doc(db, 'applications', applicationId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+// --- Resume History (/resumeVersions) ---
+
+export type ResumeVersionSource = 'uploaded' | 'improved' | 'built';
+
+export interface ResumeVersionRecord {
+  id: string;
+  ownerId: string;
+  title: string;
+  targetRole: string;
+  source: ResumeVersionSource;
+  atsScore: number;
+  skillsCount: number;
+  detectedSkills: string[];
+  content: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
+export function subscribeResumeVersions(
+  ownerId: string,
+  onData: (items: ResumeVersionRecord[]) => void,
+  onError: (err: Error) => void,
+): Unsubscribe {
+  const path = 'resumeVersions';
+  const q = query(collection(db, path), where('ownerId', '==', ownerId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const records = snapshot.docs
+        .map((d) => d.data() as ResumeVersionRecord)
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+      onData(records);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        onError(wrapped instanceof Error ? wrapped : new Error(String(wrapped)));
+      }
+    },
+  );
+}
+
+export async function saveResumeVersion(
+  ownerId: string,
+  input: {
+    title: string;
+    targetRole: string;
+    source: ResumeVersionSource;
+    atsScore: number;
+    skillsCount: number;
+    detectedSkills: string[];
+    content: string;
+  },
+): Promise<string> {
+  const versionId = makeSafeId('resv');
+  const path = `resumeVersions/${versionId}`;
+  const cleanTitle = (input.title.trim() || 'Untitled Resume').slice(0, 160);
+  const cleanContent = input.content.trim().slice(0, 25000);
+  if (!cleanContent) {
+    throw new Error('Resume content cannot be empty.');
+  }
+
+  const cleanSkills = input.detectedSkills
+    .map((s) => String(s).trim().slice(0, 60))
+    .filter(Boolean)
+    .slice(0, 80);
+
+  try {
+    await setDoc(doc(db, 'resumeVersions', versionId), {
+      id: versionId,
+      ownerId,
+      title: cleanTitle,
+      targetRole: (input.targetRole || 'All Roles').slice(0, 80),
+      source: input.source,
+      atsScore: Math.min(100, Math.max(0, Math.round(Number(input.atsScore) || 0))),
+      skillsCount: Math.min(200, Math.max(0, Math.round(Number(input.skillsCount) || cleanSkills.length))),
+      detectedSkills: cleanSkills,
+      content: cleanContent,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return versionId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function deleteResumeVersion(versionId: string): Promise<void> {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(versionId)) {
+    throw new Error('Invalid resume version ID.');
+  }
+  const path = `resumeVersions/${versionId}`;
+  try {
+    await deleteDoc(doc(db, 'resumeVersions', versionId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+

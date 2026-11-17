@@ -153,6 +153,41 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidApplication(data, applicationId) {
+      return data.keys().hasAll(['id', 'ownerId', 'company', 'role', 'status', 'atsScore', 'notes', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerId', 'company', 'role', 'status', 'atsScore', 'jobUrl', 'appliedDate', 'notes', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == applicationId && isValidId(data.id)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.company is string && data.company.size() >= 1 && data.company.size() <= 120
+        && data.role is string && data.role.size() >= 1 && data.role.size() <= 120
+        && data.status in ['saved', 'applied', 'interviewing', 'offer', 'rejected']
+        && data.atsScore is number && data.atsScore >= 0 && data.atsScore <= 100
+        && (!('jobUrl' in data) || (data.jobUrl is string && data.jobUrl.size() <= 500))
+        && (!('appliedDate' in data) || (data.appliedDate is string && data.appliedDate.size() <= 40))
+        && data.notes is string && data.notes.size() <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidResumeVersion(data, versionId) {
+      return data.keys().hasAll(['id', 'ownerId', 'title', 'targetRole', 'source', 'atsScore', 'skillsCount', 'detectedSkills', 'content', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'ownerId', 'title', 'targetRole', 'source', 'atsScore', 'skillsCount', 'detectedSkills', 'content', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id == versionId && isValidId(data.id)
+        && data.ownerId is string && isValidId(data.ownerId)
+        && (data.ownerId == request.auth.uid || isAdmin())
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.targetRole is string && data.targetRole.size() <= 80
+        && data.source in ['uploaded', 'improved', 'built']
+        && data.atsScore is number && data.atsScore >= 0 && data.atsScore <= 100
+        && data.skillsCount is int && data.skillsCount >= 0 && data.skillsCount <= 200
+        && data.detectedSkills is list && data.detectedSkills.size() <= 80
+        && (data.detectedSkills.size() == 0 || data.detectedSkills[0] is string)
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 25000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // --- Collection Rules ---
 
     // Admins collection locked down (sole admin is verified pythonnmasterr@gmail.com)
@@ -300,6 +335,54 @@ service cloud.firestore {
         && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'skills', 'updatedAt']));
       allow delete: if isVerifiedUser()
         && isValidId(roleId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Job Application Tracker
+    match /applications/{applicationId} {
+      allow get: if isSignedIn() && isValidId(applicationId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(applicationId)
+        && isValidApplication(incoming(), applicationId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(applicationId)
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && isValidApplication(incoming(), applicationId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['company', 'role', 'status', 'atsScore', 'jobUrl', 'appliedDate', 'notes', 'updatedAt']));
+      allow delete: if isVerifiedUser()
+        && isValidId(applicationId)
+        && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Resume History Versions
+    match /resumeVersions/{versionId} {
+      allow get: if isSignedIn() && isValidId(versionId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(versionId)
+        && isValidResumeVersion(incoming(), versionId)
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(versionId)
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && isValidResumeVersion(incoming(), versionId)
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'targetRole', 'atsScore', 'skillsCount', 'detectedSkills', 'content', 'updatedAt']));
+      allow delete: if isVerifiedUser()
+        && isValidId(versionId)
         && (existing().ownerId == request.auth.uid || isAdmin());
     }
   }

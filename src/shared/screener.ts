@@ -43,6 +43,29 @@ export interface RecommendedSkillItem {
   role: string;
 }
 
+export interface AtsCheckItem {
+  label: string;
+  passed: boolean;
+  score: number;
+  max: number;
+  detail: string;
+}
+
+export interface AtsDiagnostics {
+  atsScore: number;
+  grade: 'A' | 'B' | 'C' | 'D';
+  checks: AtsCheckItem[];
+}
+
+export interface JobDescriptionMatch {
+  pct: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  summary: string;
+}
+
 export interface ScreenedCandidateResult {
   id: string;
   name: string;
@@ -63,6 +86,9 @@ export interface ScreenedCandidateResult {
   recommendedSkills: RecommendedSkillItem[];
   tips: string[];
   rawTextPreview: string;
+  fullText?: string;
+  atsChecks?: AtsDiagnostics;
+  jdMatch?: JobDescriptionMatch;
 }
 
 export interface PoolAggregateItem {
@@ -74,6 +100,7 @@ export interface ScreeningPoolResponse {
   candidateCount: number;
   averageScore: number;
   targetRole: string;
+  hasJobDescription?: boolean;
   topSkills: PoolAggregateItem[];
   topGaps: PoolAggregateItem[];
   candidates: ScreenedCandidateResult[];
@@ -81,17 +108,17 @@ export interface ScreeningPoolResponse {
 
 const RAW_CATEGORIES: Record<string, string> = {
   Languages:
-    'javascript|js|ecmascript;typescript;python;java;c#|csharp;golang;rust;php;ruby;sql|postgresql|mysql',
+    'javascript|js|ecmascript;typescript;python;java;c++|cpp;c#|csharp;golang;rust;php;ruby;sql|postgresql|postgres|mysql|mongodb|mongo',
   Frontend:
-    'react|reactjs|react.js;vue|vue.js;angular;next.js|nextjs;html;css|sass|tailwind;redux',
+    'react|reactjs|react.js|react native;vue|vue.js;angular;next.js|nextjs;html|html5;css|css3|sass|tailwind|tailwindcss;redux',
   Backend:
-    'node.js|nodejs|node;express;django;flask;spring boot|spring framework;graphql;rest api|rest apis|restful;microservices',
+    'node.js|nodejs|node;express;fastapi;django;flask;spring boot|spring framework;graphql;rest api|rest apis|restful;microservices;redis',
   'Cloud and DevOps':
-    'aws|amazon web services;azure;gcp|google cloud;docker;kubernetes|k8s;terraform;ci/cd|jenkins|github actions;linux',
+    'aws|amazon web services;azure;gcp|google cloud;docker;kubernetes|k8s;terraform;ci/cd|jenkins|github actions|gitlab ci;linux',
   'Data and ML':
-    'machine learning;tensorflow;pytorch;pandas;data analysis;tableau;power bi;spark;nlp;statistics',
+    'machine learning;tensorflow;pytorch;scikit-learn|sklearn;pandas;data analysis;tableau;power bi;spark;nlp;statistics',
   Practice:
-    'git;agile|scrum;jira;leadership|mentoring|team lead;communication;testing|jest|cypress|unit testing;figma;seo;excel;project management',
+    'git;agile|scrum;jira;leadership|mentoring|team lead;communication;testing|jest|cypress|playwright|unit testing;figma;seo;excel;project management',
 };
 
 interface InternalSkill {
@@ -219,7 +246,7 @@ function extractDateSpanYears(text: string): number {
   const ends: number[] = [];
   const currentYear = new Date().getFullYear();
   for (const m of text.matchAll(
-    /\b((?:19|20)\d{2})\s*(?:-|–|—|to)\s*((?:19|20)\d{2}|present|current|now)\b/gi,
+    /\b((?:19|20)\d{2})\s*(?:-|–|—|to)\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+)?((?:19|20)\d{2}|present|current|now)\b/gi,
   )) {
     starts.push(Number(m[1]));
     ends.push(/\d/.test(m[2]) ? Number(m[2]) : currentYear);
@@ -232,6 +259,19 @@ function findSkills(text: string): InternalSkill[] {
   return INTERNAL_SKILLS.filter((skill) => skill.patterns.some((pattern) => pattern.test(lower)));
 }
 
+function extractCandidateName(chunk: string, index: number): string {
+  const lines = chunk
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !/^(resume|curriculum vitae|cv)$/i.test(l));
+  const rawFirst = lines[0] || '';
+  const cleaned = rawFirst.split(/\s*[|•—]\s*|\S+@\S+/)[0].trim();
+  if (cleaned.length >= 2 && cleaned.length <= 55) {
+    return cleaned;
+  }
+  return `Candidate ${index + 1}`;
+}
+
 export function parsePastedResumes(raw: string): ResumeInput[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
@@ -239,11 +279,10 @@ export function parsePastedResumes(raw: string): ResumeInput[] {
     .split(/^\s*---+\s*$/m)
     .map((chunk) => chunk.trim())
     .filter(Boolean)
-    .map((chunk, idx) => {
-      const firstLine = chunk.split('\n')[0].trim();
-      const name = firstLine.length > 0 && firstLine.length <= 45 ? firstLine : `Candidate ${idx + 1}`;
-      return { name, text: chunk };
-    });
+    .map((chunk, idx) => ({
+      name: extractCandidateName(chunk, idx),
+      text: chunk,
+    }));
 }
 
 function makeCandidateId(index: number, name: string): string {
@@ -255,11 +294,236 @@ function makeCandidateId(index: number, name: string): string {
   return `cand_${index + 1}_${slug || 'resume'}_${Date.now().toString(36).slice(-4)}`;
 }
 
+const JD_STOPWORDS = new Set([
+  'about', 'above', 'across', 'after', 'against', 'along', 'already', 'also', 'although',
+  'among', 'another', 'around', 'because', 'before', 'behind', 'being', 'below', 'between',
+  'both', 'build', 'building', 'candidate', 'candidates', 'company', 'could', 'culture',
+  'daily', 'deliver', 'depending', 'description', 'desired', 'different', 'during', 'each',
+  'either', 'enable', 'ensure', 'environment', 'equal', 'every', 'excellent', 'experience',
+  'experienced', 'familiarity', 'following', 'from', 'full', 'good', 'great', 'have', 'having',
+  'help', 'high', 'highly', 'ideal', 'including', 'industry', 'into', 'join', 'knowledge',
+  'large', 'least', 'level', 'like', 'looking', 'make', 'making', 'more', 'most', 'must',
+  'need', 'needed', 'needs', 'nice', 'opportunity', 'other', 'others', 'over', 'part',
+  'partner', 'passion', 'people', 'plus', 'position', 'preferred', 'qualifications', 'related',
+  'required', 'requirements', 'responsibilities', 'responsible', 'role', 'roles', 'salary',
+  'same', 'scale', 'seeking', 'should', 'similar', 'skills', 'some', 'someone', 'strong',
+  'such', 'support', 'team', 'teams', 'technical', 'technologies', 'technology', 'than',
+  'that', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those', 'through',
+  'time', 'together', 'tools', 'understanding', 'using', 'various', 'very', 'want', 'well',
+  'what', 'when', 'where', 'which', 'while', 'will', 'with', 'within', 'without', 'work',
+  'working', 'world', 'would', 'year', 'years', 'your',
+]);
+
+export function computeAtsDiagnostics(
+  text: string,
+  preDetectedSkills?: string[],
+): AtsDiagnostics {
+  const clean = text.trim();
+  const lower = clean.toLowerCase();
+  const words = clean ? clean.split(/\s+/).length : 0;
+  const detectedCount = preDetectedSkills ? preDetectedSkills.length : findSkills(clean).length;
+
+  const hasEmail = /[\w.+-]+@[\w-]+\.[\w.]+/.test(clean);
+  const hasPhone = /\+?\d[\d\s().-]{8,}\d/.test(clean);
+  const hasLink = /linkedin\.com|github\.com|portfolio|https?:\/\//i.test(clean);
+  const contactPoints = (hasEmail ? 6 : 0) + (hasPhone ? 5 : 0) + (hasLink ? 4 : 0);
+
+  const foundSections = Object.keys(SECTIONS).filter((key) => SECTIONS[key].test(lower));
+  const sectionPoints = Math.min(20, foundSections.length * 4);
+
+  const lengthPoints =
+    words >= 250 && words <= 900
+      ? 15
+      : words >= 150 && words <= 1150
+        ? 10
+        : words >= 80
+          ? 5
+          : 0;
+
+  const metricsCount = (
+    clean.match(/\d+(?:\.\d+)?\s*(?:%|k\b|m\b|x\b|\+)|[$₹€£]\s?\d/gi) || []
+  ).length;
+  const impactPoints = Math.min(20, metricsCount * 4);
+
+  const verbsCount = ACTION_VERBS.filter((verb) => new RegExp(`\\b${verb}\\b`).test(lower)).length;
+  const verbPoints = Math.min(10, verbsCount * 2);
+
+  const bulletLines = clean
+    .split('\n')
+    .filter((l) => /^\s*[-•*]\s+\S/.test(l)).length;
+  const hasStandardDates = /\b(?:19|20)\d{2}\b/.test(clean);
+  const structurePoints = (bulletLines >= 3 ? 6 : bulletLines >= 1 ? 3 : 0) + (hasStandardDates ? 4 : 0);
+
+  const keywordPoints = Math.min(10, detectedCount);
+
+  const checks: AtsCheckItem[] = [
+    {
+      label: 'Contact header',
+      passed: hasEmail && hasPhone,
+      score: contactPoints,
+      max: 15,
+      detail:
+        hasEmail && hasPhone
+          ? hasLink
+            ? 'Email, phone, and profile link detected'
+            : 'Email and phone present (add LinkedIn/GitHub for full marks)'
+          : `Missing ${[!hasEmail && 'email', !hasPhone && 'phone'].filter(Boolean).join(' and ')}`,
+    },
+    {
+      label: 'Standard ATS sections',
+      passed: foundSections.length >= 3,
+      score: sectionPoints,
+      max: 20,
+      detail: `${foundSections.length}/5 standard headings (${foundSections.join(', ') || 'none'})`,
+    },
+    {
+      label: 'Optimal resume length',
+      passed: words >= 250 && words <= 900,
+      score: lengthPoints,
+      max: 15,
+      detail:
+        words >= 250 && words <= 900
+          ? `${words} words (ideal 1–2 page ATS density)`
+          : words < 250
+            ? `${words} words (too brief; aim for 250–900 words)`
+            : `${words} words (dense; trim toward 900 words)`,
+    },
+    {
+      label: 'Quantified impact metrics',
+      passed: metricsCount >= 3,
+      score: impactPoints,
+      max: 20,
+      detail: `${metricsCount} measurable metric${metricsCount === 1 ? '' : 's'} (%, $, multipliers)`,
+    },
+    {
+      label: 'Action verb openings',
+      passed: verbsCount >= 4,
+      score: verbPoints,
+      max: 10,
+      detail: `${verbsCount} strong action verbs detected`,
+    },
+    {
+      label: 'Scannable bullets & dates',
+      passed: bulletLines >= 3 && hasStandardDates,
+      score: structurePoints,
+      max: 10,
+      detail: `${bulletLines} bullet line${bulletLines === 1 ? '' : 's'}${hasStandardDates ? ' · timeline years found' : ' · add employment years'}`,
+    },
+    {
+      label: 'Core skill keyword density',
+      passed: detectedCount >= 6,
+      score: keywordPoints,
+      max: 10,
+      detail: `${detectedCount} recognized industry skills`,
+    },
+  ];
+
+  const atsScore = Math.min(
+    100,
+    checks.reduce((sum, item) => sum + item.score, 0),
+  );
+  const grade: 'A' | 'B' | 'C' | 'D' =
+    atsScore >= 82 ? 'A' : atsScore >= 65 ? 'B' : atsScore >= 45 ? 'C' : 'D';
+
+  return { atsScore, grade, checks };
+}
+
+function extractJdKeywords(jobDescription: string, taxonomyNames: Set<string>): string[] {
+  const counts: Record<string, number> = {};
+  const tokens = jobDescription
+    .toLowerCase()
+    .replace(/[^a-z0-9+.#/\s-]/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.replace(/^[.-]+|[.-]+$/g, ''))
+    .filter(
+      (t) =>
+        t.length >= 4 &&
+        t.length <= 28 &&
+        !/^\d+$/.test(t) &&
+        !JD_STOPWORDS.has(t) &&
+        !taxonomyNames.has(t),
+    );
+
+  for (const tok of tokens) {
+    counts[tok] = (counts[tok] || 0) + 1;
+  }
+
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 12)
+    .map(([word]) => word);
+}
+
+export function matchJobDescription(
+  resumeText: string,
+  jobDescription: string,
+): JobDescriptionMatch | undefined {
+  const cleanJd = jobDescription.trim();
+  if (!cleanJd) return undefined;
+
+  const resumeLower = resumeText.toLowerCase();
+  const jdSkills = findSkills(cleanJd);
+  const resumeSkills = new Set(findSkills(resumeText).map((s) => s.name));
+
+  const matchedSkills: string[] = [];
+  const missingSkills: string[] = [];
+  for (const sk of jdSkills) {
+    if (resumeSkills.has(sk.name) || sk.patterns.some((p) => p.test(resumeLower))) {
+      matchedSkills.push(sk.name);
+    } else {
+      missingSkills.push(sk.name);
+    }
+  }
+
+  const jdSkillNames = new Set(jdSkills.map((s) => s.name));
+  const domainKeywords = extractJdKeywords(cleanJd, jdSkillNames);
+  const matchedKeywords: string[] = [];
+  const missingKeywords: string[] = [];
+
+  for (const kw of domainKeywords) {
+    if (buildPattern(kw).test(resumeLower)) {
+      matchedKeywords.push(kw);
+    } else {
+      missingKeywords.push(kw);
+    }
+  }
+
+  const skillRatio = jdSkills.length > 0 ? matchedSkills.length / jdSkills.length : null;
+  const kwRatio = domainKeywords.length > 0 ? matchedKeywords.length / domainKeywords.length : null;
+
+  let pct = 0;
+  if (skillRatio !== null && kwRatio !== null) {
+    pct = Math.round((skillRatio * 0.72 + kwRatio * 0.28) * 100);
+  } else if (skillRatio !== null) {
+    pct = Math.round(skillRatio * 100);
+  } else if (kwRatio !== null) {
+    pct = Math.round(kwRatio * 100);
+  }
+
+  const summaryParts: string[] = [];
+  if (jdSkills.length > 0) {
+    summaryParts.push(`${matchedSkills.length}/${jdSkills.length} JD skills`);
+  }
+  if (domainKeywords.length > 0) {
+    summaryParts.push(`${matchedKeywords.length}/${domainKeywords.length} domain terms`);
+  }
+
+  return {
+    pct,
+    matchedSkills,
+    missingSkills,
+    matchedKeywords,
+    missingKeywords,
+    summary: summaryParts.join(' · ') || 'Job description analyzed',
+  };
+}
+
 export function screenCandidate(
   input: ResumeInput,
   index: number,
   customRoles: RoleDefinition[] = [],
   targetRoleTitle = '',
+  jobDescription = '',
 ): ScreenedCandidateResult {
   const text = input.text.trim();
   const lower = text.toLowerCase();
@@ -272,7 +536,9 @@ export function screenCandidate(
   const hasPhone = /\+?\d[\d\s().-]{8,}\d/.test(text);
   const hasLink = /linkedin\.com|github\.com|portfolio/i.test(text);
 
-  const metricsCount = (text.match(/\d+(?:\.\d+)?\s*(?:%|k\b|m\b|x\b)|[$₹€£]\s?\d/gi) || []).length;
+  const metricsCount = (
+    text.match(/\d+(?:\.\d+)?\s*(?:%|k\b|m\b|x\b|\+)|[$₹€£]\s?\d/gi) || []
+  ).length;
   const verbsCount = ACTION_VERBS.filter((verb) => new RegExp(`\\b${verb}\\b`).test(lower)).length;
 
   const breakdown: ScoreBreakdownItem[] = [
@@ -340,7 +606,9 @@ export function screenCandidate(
   const computedJobs: MatchedJobItem[] = normalizedRoles
     .map((role) => {
       const normalizedSkills = role.skills.map((s) => s.toLowerCase().trim()).filter(Boolean);
-      const matched = normalizedSkills.filter((s) => haveSet.has(s) || lower.includes(s));
+      const matched = normalizedSkills.filter(
+        (s) => haveSet.has(s) || buildPattern(s).test(lower),
+      );
       const missing = normalizedSkills.filter((s) => !matched.includes(s));
       const pct = normalizedSkills.length ? Math.round((matched.length / normalizedSkills.length) * 100) : 0;
       return {
@@ -374,6 +642,18 @@ export function screenCandidate(
     });
   });
 
+  const jdMatch = jobDescription.trim() ? matchJobDescription(text, jobDescription) : undefined;
+  if (jdMatch && jdMatch.missingSkills.length > 0) {
+    jdMatch.missingSkills.slice(0, 4).forEach((skill) => {
+      if (!recommendedSkills.some((r) => r.skill === skill)) {
+        recommendedSkills.unshift({ skill, role: 'Job Description' });
+      }
+    });
+  }
+
+  const detectedSkillNames = detected.map((s) => s.name).slice(0, 80);
+  const atsChecks = computeAtsDiagnostics(text, detectedSkillNames);
+
   const ratios = breakdown
     .map((item) => ({ label: item.label, ratio: item.points / item.max }))
     .sort((a, b) => b.ratio - a.ratio);
@@ -391,13 +671,16 @@ export function screenCandidate(
     strongestArea: ratios[0]?.label || 'Skills breadth',
     weakestArea: ratios[ratios.length - 1]?.label || 'Measurable results',
     prefix,
-    detectedSkills: detected.map((s) => s.name).slice(0, 80),
+    detectedSkills: detectedSkillNames,
     breakdown,
     categoryCounts,
     matchedJobs: matchedJobs.slice(0, 5),
     recommendedSkills: recommendedSkills.slice(0, 15),
     tips: tips.slice(0, 10),
     rawTextPreview: text.slice(0, 2400),
+    fullText: text.slice(0, 24000),
+    atsChecks,
+    jdMatch,
   };
 }
 
@@ -405,12 +688,19 @@ export function screenPool(
   inputs: ResumeInput[],
   customRoles: RoleDefinition[] = [],
   targetRoleTitle = 'All Roles',
+  jobDescription = '',
 ): ScreeningPoolResponse {
+  const hasJobDescription = Boolean(jobDescription.trim());
   const candidates = inputs
     .filter((i) => i.text && i.text.trim().length > 0)
     .slice(0, 50)
-    .map((input, idx) => screenCandidate(input, idx, customRoles, targetRoleTitle))
+    .map((input, idx) => screenCandidate(input, idx, customRoles, targetRoleTitle, jobDescription))
     .sort((a, b) => {
+      if (hasJobDescription) {
+        const aJd = a.jdMatch?.pct ?? 0;
+        const bJd = b.jdMatch?.pct ?? 0;
+        if (bJd !== aJd) return bJd - aJd;
+      }
       if (targetRoleTitle && targetRoleTitle !== 'All Roles') {
         const aTarget = a.matchedJobs.find(
           (j) => j.title.toLowerCase() === targetRoleTitle.toLowerCase(),
@@ -453,6 +743,7 @@ export function screenPool(
     candidateCount: candidates.length,
     averageScore,
     targetRole: targetRoleTitle || 'All Roles',
+    hasJobDescription,
     topSkills,
     topGaps,
     candidates,

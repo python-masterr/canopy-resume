@@ -4,21 +4,37 @@ import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import {
   DEFAULT_ROLES,
   SAMPLE_RESUMES,
+  computeAtsDiagnostics,
   parsePastedResumes,
+  screenCandidate,
   type ResumeInput,
+  type ScreenedCandidateResult,
   type ScreeningPoolResponse,
 } from './shared/screener.ts';
 import {
+  formatFirestoreError,
+  saveResumeVersion,
   saveScreeningToFirestore,
+  subscribeApplications,
   subscribeCustomRoles,
+  subscribeResumeVersions,
   subscribeUserScreenings,
+  type JobApplicationRecord,
+  type ResumeVersionRecord,
+  type ResumeVersionSource,
   type SavedCustomRoleRecord,
   type SavedScreeningRecord,
 } from './lib/firestoreService.ts';
 import { AdminPage } from './components/AdminPage.tsx';
+import { AiStudioPanel, type AiStudioTab } from './components/AiStudioPanel.tsx';
+import {
+  ApplicationTrackerPanel,
+  type TrackerPrefillDraft,
+} from './components/ApplicationTrackerPanel.tsx';
 import { CandidateCard } from './components/CandidateCard.tsx';
 import { CustomRolesPanel } from './components/CustomRolesPanel.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
+import { ResumeHistoryPanel } from './components/ResumeHistoryPanel.tsx';
 import { SavedScreeningsPanel } from './components/SavedScreeningsPanel.tsx';
 import { ScoreHistogram, type ScoreBin } from './components/ScoreHistogram.tsx';
 
@@ -42,16 +58,7 @@ const LEAVES = Array.from({ length: 9 }, (_, i) => ({
 }));
 
 function CanopyWorkspace() {
-  const {
-    user,
-    isAdmin,
-    authReady,
-    logout,
-    resendVerification,
-    refreshUser,
-    authNotice,
-    authError,
-  } = useAuth();
+  const { user, isAdmin, authReady, logout } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginMode, setLoginMode] = useState<'signup' | 'signin'>('signup');
   const [hasDismissedGate, setHasDismissedGate] = useState(false);
@@ -66,7 +73,7 @@ function CanopyWorkspace() {
       setLoginMode('signup');
       setLoginOpen(true);
     }
-    if (user && user.emailVerified) {
+    if (user) {
       setLoginOpen(false);
     }
   }, [authReady, user, hasDismissedGate, activePage]);
@@ -131,6 +138,7 @@ function CanopyWorkspace() {
 
   // Screener input state
   const [pastedText, setPastedText] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
   const [files, setFiles] = useState<UploadedFileEntry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [targetRole, setTargetRole] = useState('All Roles');
@@ -145,11 +153,21 @@ function CanopyWorkspace() {
   const [savedBatchId, setSavedBatchId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // AI Studio, Tracker, and Resume History shared context
+  const [studioTab, setStudioTab] = useState<AiStudioTab>('analyze');
+  const [studioResumeText, setStudioResumeText] = useState('');
+  const [studioCandidateName, setStudioCandidateName] = useState('');
+  const [trackerPrefill, setTrackerPrefill] = useState<TrackerPrefillDraft | null>(null);
+
   // Firestore subscriptions
   const [savedScreenings, setSavedScreenings] = useState<SavedScreeningRecord[]>([]);
   const [loadingScreenings, setLoadingScreenings] = useState(false);
   const [selectedScreeningId, setSelectedScreeningId] = useState<string | null>(null);
   const [customRoles, setCustomRoles] = useState<SavedCustomRoleRecord[]>([]);
+  const [applications, setApplications] = useState<JobApplicationRecord[]>([]);
+  const [loadingApplications, setLoadingApplications] = useState(false);
+  const [resumeVersions, setResumeVersions] = useState<ResumeVersionRecord[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
@@ -158,11 +176,16 @@ function CanopyWorkspace() {
     if (!user) {
       setSavedScreenings([]);
       setCustomRoles([]);
+      setApplications([]);
+      setResumeVersions([]);
       setSelectedScreeningId(null);
       return;
     }
 
     setLoadingScreenings(true);
+    setLoadingApplications(true);
+    setLoadingVersions(true);
+
     const unsubScreenings = subscribeUserScreenings(
       user.uid,
       (rows) => {
@@ -182,9 +205,35 @@ function CanopyWorkspace() {
       (err) => console.error(err),
     );
 
+    const unsubApps = subscribeApplications(
+      user.uid,
+      (rows) => {
+        setApplications(rows);
+        setLoadingApplications(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoadingApplications(false);
+      },
+    );
+
+    const unsubVersions = subscribeResumeVersions(
+      user.uid,
+      (rows) => {
+        setResumeVersions(rows);
+        setLoadingVersions(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoadingVersions(false);
+      },
+    );
+
     return () => {
       unsubScreenings();
       unsubRoles();
+      unsubApps();
+      unsubVersions();
     };
   }, [user]);
 
@@ -195,9 +244,9 @@ function CanopyWorkspace() {
     return Array.from(names);
   }, [customRoles]);
 
-  const handleFilesSelected = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    const picked = Array.from(fileList).slice(0, 20);
+  const handleFilesSelected = async (incomingFiles: FileList | File[] | null) => {
+    const picked = incomingFiles ? Array.from(incomingFiles).slice(0, 20) : [];
+    if (picked.length === 0) return;
 
     const placeholders: UploadedFileEntry[] = picked.map((f, idx) => ({
       id: `${Date.now()}_${idx}_${f.name}`,
@@ -213,6 +262,7 @@ function CanopyWorkspace() {
     }));
 
     setFiles((prev) => [...prev, ...placeholders].slice(0, 20));
+    setScreenError(null);
 
     const formData = new FormData();
     picked.forEach((f) => formData.append('files', f));
@@ -271,7 +321,7 @@ function CanopyWorkspace() {
     }
   };
 
-  const runScreening = async (overrideText?: string) => {
+  const runScreening = async (overrideText?: string, overrideTargetRole?: string) => {
     setScreenError(null);
     setSavedBatchId(null);
     setSaveError(null);
@@ -282,6 +332,7 @@ function CanopyWorkspace() {
       return;
     }
 
+    const activeRole = overrideTargetRole !== undefined ? overrideTargetRole : targetRole;
     const textToParse = overrideText !== undefined ? overrideText : pastedText;
     const resumes: ResumeInput[] = [
       ...parsePastedResumes(textToParse),
@@ -295,7 +346,12 @@ function CanopyWorkspace() {
     ];
 
     if (resumes.length === 0) {
-      setScreenError('Add at least one resume. Upload a file or paste resume text above.');
+      const failedFile = files.find((f) => f.error);
+      if (failedFile) {
+        setScreenError(`Could not read ${failedFile.fileName}: ${failedFile.status}`);
+      } else {
+        setScreenError('Add at least one resume. Upload a file or paste resume text above.');
+      }
       return;
     }
 
@@ -306,7 +362,8 @@ function CanopyWorkspace() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resumes,
-          targetRole,
+          targetRole: activeRole,
+          jobDescription,
           customRoles: customRoles.map((r) => ({ title: r.title, skills: r.skills })),
         }),
       });
@@ -315,14 +372,20 @@ function CanopyWorkspace() {
         throw new Error(data.error || 'Screening failed.');
       }
       setPoolResult(data);
+      if (data.candidates[0] && !studioResumeText.trim()) {
+        setStudioResumeText(data.candidates[0].fullText || data.candidates[0].rawTextPreview);
+        setStudioCandidateName(data.candidates[0].name);
+      }
       setBatchTitle(
-        targetRole !== 'All Roles'
-          ? `${targetRole} · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+        activeRole !== 'All Roles'
+          ? `${activeRole} · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
           : `Resume Batch · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
       );
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 60);
+      if (overrideTargetRole === undefined) {
+        setTimeout(() => {
+          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+      }
     } catch (err) {
       setScreenError(err instanceof Error ? err.message : 'Unable to analyze resumes.');
     } finally {
@@ -337,7 +400,7 @@ function CanopyWorkspace() {
       return;
     }
     if (!user.emailVerified) {
-      setSaveError('Please verify your email address (see the banner at the top) before saving to Cloud Firestore.');
+      setSaveError('Please sign in with a verified Google account to save screenings to Cloud Firestore.');
       return;
     }
     setSavingBatch(true);
@@ -347,10 +410,74 @@ function CanopyWorkspace() {
       setSavedBatchId(newId);
       setSelectedScreeningId(newId);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save screening.');
+      setSaveError(formatFirestoreError(err, 'Failed to save screening.'));
     } finally {
       setSavingBatch(false);
     }
+  };
+
+  const handleSaveResumeVersion = async (params: {
+    title: string;
+    targetRole: string;
+    source: ResumeVersionSource;
+    content: string;
+  }) => {
+    if (!user) {
+      openAuthModal('signin');
+      throw new Error('Sign in with Google to save resume versions to your history.');
+    }
+    if (!user.emailVerified) {
+      throw new Error('A verified Google session is required to save resume history.');
+    }
+    const screened = screenCandidate(
+      { name: params.title, text: params.content },
+      0,
+      customRoles.map((r) => ({ title: r.title, skills: r.skills })),
+      params.targetRole,
+      jobDescription,
+    );
+    const ats = computeAtsDiagnostics(params.content, screened.detectedSkills);
+    await saveResumeVersion(user.uid, {
+      title: params.title,
+      targetRole: params.targetRole || targetRole,
+      source: params.source,
+      atsScore: ats.atsScore,
+      skillsCount: screened.skillsCount,
+      detectedSkills: screened.detectedSkills,
+      content: params.content,
+    });
+  };
+
+  const handleOpenCandidateInStudio = (cand: ScreenedCandidateResult, roleOverride?: string) => {
+    setStudioResumeText(cand.fullText || cand.rawTextPreview || '');
+    setStudioCandidateName(cand.name);
+    if (roleOverride && roleOverride !== 'All Roles') {
+      setTargetRole(roleOverride);
+    } else if (cand.matchedJobs[0]?.title && targetRole === 'All Roles') {
+      setTargetRole(cand.matchedJobs[0].title);
+    }
+    setStudioTab('analyze');
+    document.getElementById('studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleTrackCandidateJob = (cand: ScreenedCandidateResult, roleOverride?: string) => {
+    const ats =
+      cand.atsChecks ??
+      computeAtsDiagnostics(cand.fullText || cand.rawTextPreview || '', cand.detectedSkills);
+    const bestRole =
+      (roleOverride && roleOverride !== 'All Roles' ? roleOverride : '') ||
+      (targetRole !== 'All Roles' ? targetRole : '') ||
+      cand.matchedJobs[0]?.title ||
+      'Software Engineer';
+    setTrackerPrefill({
+      role: bestRole,
+      atsScore: ats.atsScore,
+      notes: `Candidate: ${cand.name} · Score ${cand.score}/100 · Top skills: ${cand.detectedSkills
+        .slice(0, 6)
+        .join(', ')}`,
+      key: Date.now(),
+    });
+    document.getElementById('tracker')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const firstName = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Account';
@@ -396,18 +523,21 @@ function CanopyWorkspace() {
             Canopy
           </a>
 
-          <div className="hidden md:flex items-center gap-7 text-sm font-medium">
+          <div className="hidden md:flex items-center gap-6 text-sm font-medium">
             <a href="#try" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
               Screener
             </a>
+            <a href="#studio" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
+              AI Studio
+            </a>
+            <a href="#tracker" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
+              Tracker
+            </a>
+            <a href="#history" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
+              History
+            </a>
             <a href="#saved" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
               Saved
-            </a>
-            <a href="#how" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
-              How it works
-            </a>
-            <a href="#faq" className="opacity-90 hover:opacity-100 hover:underline whitespace-nowrap shrink-0">
-              FAQ
             </a>
             {(!user || isAdmin) && (
               <a
@@ -511,39 +641,6 @@ function CanopyWorkspace() {
 
       {/* Interactive Screener Section */}
       <main className="flex-1">
-        {user && !user.emailVerified && (
-          <div className="px-4 sm:px-8 lg:px-12 pt-6 max-w-[1200px] mx-auto">
-            <div
-              role="status"
-              className="rounded-2xl border border-[var(--gold)] bg-[var(--card)] p-4 flex flex-wrap items-center justify-between gap-4"
-            >
-              <div className="text-sm">
-                <strong className="font-semibold text-[var(--ink)]">Verify your email address</strong>{' '}
-                <span className="text-[var(--mut)]">
-                  to save screening batches and custom roles to Cloud Firestore.
-                </span>
-                {authNotice && <div className="text-xs text-[var(--acc)] mt-1">{authNotice}</div>}
-                {authError && <div className="text-xs text-[var(--bad)] mt-1">{authError}</div>}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => void resendVerification()}
-                  className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--acc)] cursor-pointer"
-                >
-                  Resend email
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void refreshUser()}
-                  className="rounded-lg bg-[var(--acc)] text-[var(--on)] px-3 py-1.5 text-xs font-semibold cursor-pointer"
-                >
-                  I&apos;ve verified
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         <section id="try" className="px-4 sm:px-8 lg:px-12 py-16 lg:py-24 max-w-[1200px] mx-auto">
           <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
             <div>
@@ -578,7 +675,13 @@ function CanopyWorkspace() {
                 <select
                   id="target-role-select"
                   value={targetRole}
-                  onChange={(e) => setTargetRole(e.target.value)}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    setTargetRole(nextRole);
+                    if (poolResult) {
+                      void runScreening(undefined, nextRole);
+                    }
+                  }}
                   className="rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-xs font-medium text-[var(--ink)]"
                 >
                   {availableRoleOptions.map((role) => (
@@ -607,7 +710,8 @@ function CanopyWorkspace() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                void handleFilesSelected(e.dataTransfer.files);
+                const dropped = Array.from(e.dataTransfer.files);
+                void handleFilesSelected(dropped);
               }}
               className={`border-2 border-dashed rounded-xl p-6 text-center flex flex-col items-center gap-2 mb-4 transition-colors ${
                 dragOver
@@ -634,8 +738,9 @@ function CanopyWorkspace() {
                 multiple
                 accept=".pdf,.docx,.txt,.md"
                 onChange={(e) => {
-                  void handleFilesSelected(e.target.files);
+                  const snapshot = e.target.files ? Array.from(e.target.files) : [];
                   e.target.value = '';
+                  void handleFilesSelected(snapshot);
                 }}
               />
             </div>
@@ -680,8 +785,33 @@ function CanopyWorkspace() {
               spellCheck={false}
               rows={6}
               placeholder="Or paste resume text here (separate multiple resumes with --- on its own line)"
-              className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] p-3.5 text-sm font-mono-tabular text-[var(--ink)] resize-y"
+              className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] p-3.5 text-sm font-mono-tabular text-[var(--ink)] resize-y mb-4"
             />
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label htmlFor="canopy-jd-input" className="text-xs font-semibold text-[var(--ink)]">
+                  Job description <span className="font-normal text-[var(--mut)]">· optional (enables JD keyword &amp; gap matching)</span>
+                </label>
+                {jobDescription && (
+                  <button
+                    type="button"
+                    onClick={() => setJobDescription('')}
+                    className="text-xs text-[var(--mut)] hover:text-[var(--ink)] underline cursor-pointer"
+                  >
+                    Clear JD
+                  </button>
+                )}
+              </div>
+              <textarea
+                id="canopy-jd-input"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                rows={3}
+                placeholder="Paste job requirements or description to rank candidates against exact role keywords and surface JD skill gaps…"
+                className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] p-3 text-xs text-[var(--ink)] resize-y"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 mb-8">
@@ -748,6 +878,7 @@ function CanopyWorkspace() {
                         {poolResult.candidateCount} resume{poolResult.candidateCount === 1 ? '' : 's'}{' '}
                         analyzed · Average score {poolResult.averageScore}/100 · Target:{' '}
                         {poolResult.targetRole}
+                        {poolResult.hasJobDescription ? ' · JD match active' : ''}
                       </p>
                     </div>
 
@@ -843,6 +974,17 @@ function CanopyWorkspace() {
                       candidate={cand}
                       rank={overallRank}
                       totalCount={poolResult.candidates.length}
+                      targetRole={poolResult.targetRole}
+                      onOpenInAiStudio={(c) => handleOpenCandidateInStudio(c, poolResult.targetRole)}
+                      onSaveVersion={async (c) => {
+                        await handleSaveResumeVersion({
+                          title: c.name,
+                          targetRole: poolResult.targetRole,
+                          source: 'uploaded',
+                          content: c.fullText || c.rawTextPreview,
+                        });
+                      }}
+                      onTrackJob={(c) => handleTrackCandidateJob(c, poolResult.targetRole)}
                     />
                   );
                 })}
@@ -854,6 +996,60 @@ function CanopyWorkspace() {
           <CustomRolesPanel customRoles={customRoles} onOpenLogin={() => openAuthModal('signin')} />
         </section>
 
+        {/* AI Career Studio */}
+        <AiStudioPanel
+          activeResumeText={studioResumeText}
+          activeCandidateName={studioCandidateName}
+          activeTargetRole={targetRole}
+          activeJobDescription={jobDescription}
+          roleOptions={availableRoleOptions}
+          resumeVersions={resumeVersions}
+          activeTab={studioTab}
+          onChangeTab={setStudioTab}
+          onChangeResumeContext={(text, label) => {
+            setStudioResumeText(text);
+            if (label !== undefined) setStudioCandidateName(label);
+          }}
+          onChangeTargetRole={setTargetRole}
+          onChangeJobDescription={setJobDescription}
+          onSendToScreener={(text, name) => {
+            setPastedText(text);
+            setStudioResumeText(text);
+            setStudioCandidateName(name);
+            document.getElementById('try')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            void runScreening(text);
+          }}
+          onSaveResumeVersion={handleSaveResumeVersion}
+        />
+
+        {/* Job Application Tracker */}
+        <ApplicationTrackerPanel
+          applications={applications}
+          loading={loadingApplications}
+          prefillDraft={trackerPrefill}
+          onOpenLogin={() => openAuthModal('signin')}
+        />
+
+        {/* Resume History */}
+        <ResumeHistoryPanel
+          versions={resumeVersions}
+          loading={loadingVersions}
+          onOpenInStudio={(ver) => {
+            setStudioResumeText(ver.content);
+            setStudioCandidateName(ver.title);
+            if (ver.targetRole) setTargetRole(ver.targetRole);
+            setStudioTab('analyze');
+            document.getElementById('studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          onLoadInScreener={(ver) => {
+            setPastedText(ver.content);
+            if (ver.targetRole) setTargetRole(ver.targetRole);
+            document.getElementById('try')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            void runScreening(ver.content, ver.targetRole || targetRole);
+          }}
+          onOpenLogin={() => openAuthModal('signin')}
+        />
+
         {/* Saved Screenings Workspace */}
         <SavedScreeningsPanel
           screenings={savedScreenings}
@@ -861,6 +1057,16 @@ function CanopyWorkspace() {
           selectedId={selectedScreeningId}
           onSelect={setSelectedScreeningId}
           onOpenLogin={() => openAuthModal('signin')}
+          onOpenInAiStudio={handleOpenCandidateInStudio}
+          onSaveVersion={async (c, roleOverride) => {
+            await handleSaveResumeVersion({
+              title: c.name,
+              targetRole: roleOverride || targetRole,
+              source: 'uploaded',
+              content: c.fullText || c.rawTextPreview,
+            });
+          }}
+          onTrackJob={handleTrackCandidateJob}
         />
 
         {/* How it works */}

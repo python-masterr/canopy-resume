@@ -1,0 +1,503 @@
+import { jsPDF } from 'jspdf';
+import { computeAtsDiagnostics, type ScreenedCandidateResult } from '../shared/screener.ts';
+import type {
+  AiAnalyzeResult,
+  AiBuildResumeResult,
+  AiCareerRoadmapResult,
+  AiInterviewPrepResult,
+} from '../shared/aiTypes.ts';
+
+function slugifyFileName(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'canopy-report'
+  );
+}
+
+function normalizePdfText(value: string): string {
+  return value
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2022/g, '-')
+    .replace(/\u00B7/g, '|');
+}
+
+class PdfWriter {
+  doc: jsPDF;
+  y = 48;
+  pageWidth: number;
+  pageHeight: number;
+  margin = 44;
+  contentWidth: number;
+
+  constructor() {
+    this.doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    this.pageWidth = this.doc.internal.pageSize.getWidth();
+    this.pageHeight = this.doc.internal.pageSize.getHeight();
+    this.contentWidth = this.pageWidth - this.margin * 2;
+  }
+
+  ensureSpace(neededHeight: number) {
+    if (this.y + neededHeight > this.pageHeight - 48) {
+      this.doc.addPage();
+      this.y = 48;
+    }
+  }
+
+  drawBanner(title: string, subtitle: string) {
+    this.doc.setFillColor(15, 42, 28);
+    this.doc.rect(0, 0, this.pageWidth, 74, 'F');
+    this.doc.setTextColor(217, 160, 44);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setFontSize(10);
+    this.doc.text('CANOPY RESUME & CAREER REPORT', this.margin, 25);
+
+    this.doc.setTextColor(246, 251, 243);
+    this.doc.setFontSize(18);
+    this.doc.text(normalizePdfText(title).slice(0, 72), this.margin, 46);
+
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(9.5);
+    this.doc.setTextColor(196, 214, 202);
+    this.doc.text(normalizePdfText(subtitle).slice(0, 105), this.margin, 62);
+
+    this.y = 98;
+    this.doc.setTextColor(18, 38, 27);
+  }
+
+  addSectionHeader(heading: string) {
+    this.ensureSpace(32);
+    this.y += 6;
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setFontSize(11.5);
+    this.doc.setTextColor(44, 122, 75);
+    this.doc.text(normalizePdfText(heading).toUpperCase(), this.margin, this.y);
+    this.y += 5;
+    this.doc.setDrawColor(211, 221, 207);
+    this.doc.setLineWidth(0.75);
+    this.doc.line(this.margin, this.y, this.pageWidth - this.margin, this.y);
+    this.y += 14;
+    this.doc.setTextColor(18, 38, 27);
+  }
+
+  addParagraph(text: string, fontSize = 10, color: [number, number, number] = [30, 46, 36]) {
+    if (!text.trim()) return;
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(fontSize);
+    this.doc.setTextColor(...color);
+    const lines = this.doc.splitTextToSize(normalizePdfText(text), this.contentWidth) as string[];
+    const lineHeight = fontSize * 1.42;
+    for (const line of lines) {
+      this.ensureSpace(lineHeight + 4);
+      this.doc.text(line, this.margin, this.y);
+      this.y += lineHeight;
+    }
+    this.y += 4;
+  }
+
+  addBullet(text: string, prefix = '-') {
+    if (!text.trim()) return;
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(9.8);
+    this.doc.setTextColor(30, 46, 36);
+    const lines = this.doc.splitTextToSize(normalizePdfText(text), this.contentWidth - 16) as string[];
+    const lineHeight = 13.8;
+    lines.forEach((line, idx) => {
+      this.ensureSpace(lineHeight + 3);
+      if (idx === 0) {
+        this.doc.text(prefix, this.margin + 2, this.y);
+      }
+      this.doc.text(line, this.margin + 14, this.y);
+      this.y += lineHeight;
+    });
+    this.y += 2;
+  }
+
+  addKeyValueLine(label: string, value: string) {
+    this.ensureSpace(16);
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setFontSize(9.8);
+    this.doc.setTextColor(18, 38, 27);
+    const cleanLabel = normalizePdfText(`${label}: `);
+    const labelWidth = this.doc.getTextWidth(cleanLabel);
+    this.doc.text(cleanLabel, this.margin, this.y);
+
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setTextColor(65, 84, 72);
+    const wrapped = this.doc.splitTextToSize(
+      normalizePdfText(value),
+      Math.max(120, this.contentWidth - labelWidth),
+    ) as string[];
+    wrapped.forEach((line, idx) => {
+      if (idx > 0) this.ensureSpace(14);
+      this.doc.text(line, idx === 0 ? this.margin + labelWidth : this.margin + 12, this.y);
+      this.y += 14;
+    });
+  }
+
+  addFooterAllPages() {
+    const count = this.doc.getNumberOfPages();
+    const dateStr = new Date().toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+    for (let i = 1; i <= count; i++) {
+      this.doc.setPage(i);
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.setFontSize(8.5);
+      this.doc.setTextColor(115, 132, 121);
+      this.doc.text(`Generated by Canopy on ${dateStr}`, this.margin, this.pageHeight - 22);
+      this.doc.text(`Page ${i} of ${count}`, this.pageWidth - this.margin - 52, this.pageHeight - 22);
+    }
+  }
+}
+
+export function downloadCandidateReportPdf(
+  candidate: ScreenedCandidateResult,
+  options?: {
+    targetRole?: string;
+    aiAnalysis?: AiAnalyzeResult | null;
+  },
+) {
+  const writer = new PdfWriter();
+  const ats =
+    candidate.atsChecks ??
+    computeAtsDiagnostics(candidate.fullText || candidate.rawTextPreview || '', candidate.detectedSkills);
+
+  writer.drawBanner(
+    candidate.name,
+    `Overall Score ${candidate.score}/100 (${candidate.verdict}) | ATS Readiness ${ats.atsScore}/100 (Grade ${ats.grade})${
+      options?.targetRole && options.targetRole !== 'All Roles' ? ` | Target: ${options.targetRole}` : ''
+    }`,
+  );
+
+  writer.addSectionHeader('Executive Metrics & Score Breakdown');
+  writer.addKeyValueLine(
+    'Profile Snapshot',
+    `${candidate.yearsExperience || 0} yrs experience | ${candidate.skillsCount} skills | ${candidate.measurableResults} measurable metrics | ${candidate.wordCount} words`,
+  );
+  writer.addKeyValueLine('Strongest Area', candidate.strongestArea);
+  writer.addKeyValueLine('Biggest Opportunity', candidate.weakestArea);
+
+  candidate.breakdown.forEach((item) => {
+    writer.addBullet(`${item.label}: ${item.points}/${item.max} pts`);
+  });
+
+  writer.addSectionHeader(`Advanced ATS Compatibility (${ats.atsScore}/100 · Grade ${ats.grade})`);
+  ats.checks.forEach((chk) => {
+    writer.addBullet(
+      `[${chk.passed ? 'PASS' : 'FIX'}] ${chk.label} (${chk.score}/${chk.max}) - ${chk.detail}`,
+    );
+  });
+
+  if (candidate.jdMatch) {
+    writer.addSectionHeader(`Job Description Alignment (${candidate.jdMatch.pct}%)`);
+    writer.addParagraph(candidate.jdMatch.summary);
+    if (candidate.jdMatch.matchedSkills.length > 0) {
+      writer.addKeyValueLine('Matched JD Skills', candidate.jdMatch.matchedSkills.join(', '));
+    }
+    if (candidate.jdMatch.missingSkills.length > 0) {
+      writer.addKeyValueLine('Missing JD Skills', candidate.jdMatch.missingSkills.join(', '));
+    }
+    if (candidate.jdMatch.missingKeywords.length > 0) {
+      writer.addKeyValueLine('Missing Domain Keywords', candidate.jdMatch.missingKeywords.join(', '));
+    }
+  }
+
+  writer.addSectionHeader('Role Fit & Skill Gap Analysis');
+  if (candidate.matchedJobs.length > 0) {
+    candidate.matchedJobs.forEach((job) => {
+      writer.addBullet(
+        `${candidate.prefix}${job.title}: ${job.pct}% match | Matched: ${job.matched.join(', ') || 'None'} | Gaps: ${
+          job.missing.join(', ') || 'None'
+        }`,
+      );
+    });
+  } else {
+    writer.addParagraph('No built-in or custom roles reached the minimum skill threshold yet.');
+  }
+
+  if (candidate.recommendedSkills.length > 0) {
+    writer.addKeyValueLine(
+      'Priority Skills to Learn Next',
+      candidate.recommendedSkills.map((r) => `${r.skill} (${r.role})`).join(', '),
+    );
+  }
+
+  if (candidate.tips.length > 0) {
+    writer.addSectionHeader('Actionable Resume Improvements');
+    candidate.tips.forEach((tip) => writer.addBullet(tip));
+  }
+
+  if (options?.aiAnalysis) {
+    const ai = options.aiAnalysis;
+    writer.addSectionHeader('Gemini AI Deep Resume Evaluation');
+    writer.addKeyValueLine('AI Verdict', ai.executiveVerdict);
+    writer.addParagraph(ai.candidateSummary);
+    if (ai.strengths.length > 0) {
+      writer.addKeyValueLine('Key Strengths', ai.strengths.join(' | '));
+    }
+    if (ai.redFlags.length > 0) {
+      writer.addKeyValueLine('Attention Areas', ai.redFlags.join(' | '));
+    }
+    ai.skillGaps.forEach((g) => {
+      writer.addBullet(`[${g.priority.toUpperCase()}] ${g.skill}: ${g.reason} Bridge: ${g.howToBridge}`);
+    });
+  }
+
+  writer.addFooterAllPages();
+  writer.doc.save(`${slugifyFileName(candidate.name)}-canopy-ats-report.pdf`);
+}
+
+export interface PdfReportSection {
+  heading: string;
+  paragraphs?: string[];
+  bullets?: string[];
+}
+
+export function downloadAiReportPdf(
+  title: string,
+  subtitle: string,
+  sections: PdfReportSection[],
+  fileNameBase?: string,
+) {
+  const writer = new PdfWriter();
+  writer.drawBanner(title, subtitle);
+  sections.forEach((sec) => {
+    writer.addSectionHeader(sec.heading);
+    sec.paragraphs?.forEach((p) => writer.addParagraph(p));
+    sec.bullets?.forEach((b) => writer.addBullet(b));
+  });
+  writer.addFooterAllPages();
+  writer.doc.save(`${slugifyFileName(fileNameBase || title)}.pdf`);
+}
+
+export function downloadInterviewPrepPdf(prep: AiInterviewPrepResult, targetRole: string) {
+  downloadAiReportPdf(
+    `Interview Preparation: ${prep.roleFocus || targetRole}`,
+    prep.readinessNote,
+    [
+      {
+        heading: 'Technical & Domain Questions',
+        bullets: prep.technicalQuestions.map(
+          (q) =>
+            `${q.question}\n   Why asked: ${q.whyAsked}\n   Strong signals: ${q.strongAnswerSignals.join(', ')}\n   STAR tip: ${q.starTip}`,
+        ),
+      },
+      {
+        heading: 'Behavioral Questions',
+        bullets: prep.behavioralQuestions.map(
+          (q) => `[${q.competency}] ${q.question}\n   STAR framing: ${q.starFrameworkTip}`,
+        ),
+      },
+      {
+        heading: 'Skill Gap Defense Talking Points',
+        bullets: prep.gapDefenseTalkingPoints.map((g) => `${g.gap}: ${g.howToAddress}`),
+      },
+      {
+        heading: 'Smart Questions to Ask the Interviewer',
+        bullets: prep.questionsForInterviewer,
+      },
+    ],
+    `interview-prep-${targetRole || 'role'}`,
+  );
+}
+
+export function downloadCareerRoadmapPdf(roadmap: AiCareerRoadmapResult, targetRole: string) {
+  downloadAiReportPdf(
+    `Career & Learning Roadmap`,
+    `Tailored career paths and upskilling timeline (${targetRole || 'General'})`,
+    [
+      {
+        heading: 'AI Career Recommendations',
+        bullets: roadmap.careerRecommendations.map(
+          (c) =>
+            `${c.roleTitle} (${c.fitLevel.toUpperCase()} FIT) - ${c.salaryBandNote}\n   ${c.rationale}\n   Missing skills: ${
+              c.missingSkills.join(', ') || 'None'
+            }`,
+        ),
+      },
+      {
+        heading: 'Positioning Advice',
+        bullets: roadmap.positioningAdvice,
+      },
+      {
+        heading: 'Recommended Portfolio Projects',
+        bullets: roadmap.recommendedProjects.map(
+          (p) => `${p.title}: ${p.description} (Skills: ${p.skillsDemonstrated.join(', ')})`,
+        ),
+      },
+      {
+        heading: 'Personalized Learning Roadmap',
+        bullets: roadmap.learningRoadmap.map(
+          (w) =>
+            `${w.weekLabel} - ${w.focusSkill}: ${w.goal}\n   Practice: ${w.resourcesAndPractice.join(
+              '; ',
+            )}\n   Milestone: ${w.milestoneDeliverable}`,
+        ),
+      },
+    ],
+    `career-roadmap-${targetRole || 'plan'}`,
+  );
+}
+
+export function downloadFormattedResumePdf(input: {
+  fullName: string;
+  contactLine?: string;
+  structured?: AiBuildResumeResult;
+  rawText?: string;
+}) {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 46;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 48;
+
+  const ensureSpace = (h: number) => {
+    if (y + h > pageHeight - 44) {
+      doc.addPage();
+      y = 46;
+    }
+  };
+
+  if (input.structured) {
+    const s = input.structured;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(15, 42, 28);
+    doc.text(normalizePdfText(input.fullName || 'Candidate Resume'), margin, y);
+    y += 18;
+
+    if (s.headline) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(44, 122, 75);
+      doc.text(normalizePdfText(s.headline), margin, y);
+      y += 14;
+    }
+
+    if (input.contactLine?.trim()) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(85, 104, 92);
+      const cLines = doc.splitTextToSize(normalizePdfText(input.contactLine), contentWidth) as string[];
+      cLines.forEach((line) => {
+        doc.text(line, margin, y);
+        y += 12;
+      });
+    }
+
+    y += 4;
+    doc.setDrawColor(44, 122, 75);
+    doc.setLineWidth(1.2);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 18;
+
+    const addResumeSection = (title: string) => {
+      ensureSpace(28);
+      y += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 42, 28);
+      doc.text(title.toUpperCase(), margin, y);
+      y += 4;
+      doc.setDrawColor(211, 221, 207);
+      doc.setLineWidth(0.6);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 13;
+    };
+
+    const addTextLines = (text: string, size = 10, bold = false, indent = 0) => {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      doc.setTextColor(26, 36, 30);
+      const wrapped = doc.splitTextToSize(normalizePdfText(text), contentWidth - indent) as string[];
+      wrapped.forEach((line) => {
+        ensureSpace(size * 1.4);
+        doc.text(line, margin + indent, y);
+        y += size * 1.4;
+      });
+    };
+
+    if (s.professionalSummary) {
+      addResumeSection('Summary');
+      addTextLines(s.professionalSummary, 9.8);
+      y += 4;
+    }
+
+    if (s.coreSkills.length > 0) {
+      addResumeSection('Skills');
+      addTextLines(s.coreSkills.join(' | '), 9.8);
+      y += 4;
+    }
+
+    if (s.experienceSections.length > 0) {
+      addResumeSection('Experience');
+      s.experienceSections.forEach((exp) => {
+        ensureSpace(34);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.2);
+        doc.setTextColor(18, 38, 27);
+        doc.text(normalizePdfText(`${exp.role} - ${exp.company}`), margin, y);
+
+        if (exp.duration) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9.2);
+          doc.setTextColor(85, 104, 92);
+          const dur = normalizePdfText(exp.duration);
+          doc.text(dur, pageWidth - margin - doc.getTextWidth(dur), y);
+        }
+        y += 14;
+        exp.bullets.forEach((b) => {
+          addTextLines(`- ${b}`, 9.6, false, 8);
+        });
+        y += 5;
+      });
+    }
+
+    if (s.projectHighlights.length > 0) {
+      addResumeSection('Projects');
+      s.projectHighlights.forEach((p) => addTextLines(`- ${p}`, 9.6, false, 8));
+      y += 4;
+    }
+
+    if (s.educationLines.length > 0) {
+      addResumeSection('Education');
+      s.educationLines.forEach((e) => addTextLines(e, 9.8));
+    }
+  } else {
+    const raw = (input.rawText || '').trim();
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(22, 34, 28);
+    const lines = raw.split('\n');
+    lines.forEach((rawLine, idx) => {
+      const clean = normalizePdfText(rawLine);
+      if (!clean.trim()) {
+        y += 8;
+        return;
+      }
+      const isHeading =
+        idx === 0 ||
+        /^(summary|profile|experience|work history|education|skills|projects|certifications?)$/i.test(
+          clean.trim(),
+        );
+      doc.setFont('helvetica', isHeading ? 'bold' : 'normal');
+      doc.setFontSize(idx === 0 ? 16 : isHeading ? 11 : 9.8);
+      const wrapped = doc.splitTextToSize(clean, contentWidth) as string[];
+      wrapped.forEach((w) => {
+        ensureSpace(15);
+        doc.text(w, margin, y);
+        y += idx === 0 ? 20 : 14;
+      });
+    });
+  }
+
+  doc.save(`${slugifyFileName(input.fullName || 'resume')}-ats-resume.pdf`);
+}

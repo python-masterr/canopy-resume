@@ -281,6 +281,114 @@
         }
       },
       "required": ["id", "ownerId", "title", "skills", "createdAt", "updatedAt"]
+    },
+    "JobApplication": {
+      "title": "JobApplication",
+      "description": "Tracked job application with status, ATS score, and recruiter/candidate notes.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "company": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "status": {
+          "type": "string",
+          "enum": ["saved", "applied", "interviewing", "offer", "rejected"]
+        },
+        "atsScore": {
+          "type": "number"
+        },
+        "jobUrl": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "appliedDate": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerId", "company", "role", "status", "atsScore", "notes", "createdAt", "updatedAt"]
+    },
+    "ResumeVersion": {
+      "title": "ResumeVersion",
+      "description": "Saved snapshot of a resume version (uploaded, AI-improved, or AI-built) for Resume History tracking.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "targetRole": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "source": {
+          "type": "string",
+          "enum": ["uploaded", "improved", "built"]
+        },
+        "atsScore": {
+          "type": "number"
+        },
+        "skillsCount": {
+          "type": "number"
+        },
+        "detectedSkills": {
+          "type": "array"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 25000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerId", "title", "targetRole", "source", "atsScore", "skillsCount", "detectedSkills", "content", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -303,6 +411,14 @@
     "/customRoles/{roleId}": {
       "schema": { "$ref": "#/entities/CustomRole" },
       "description": "Custom target roles created by users for skill-gap matching."
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/JobApplication" },
+      "description": "User-owned job application tracker entries."
+    },
+    "/resumeVersions/{versionId}": {
+      "schema": { "$ref": "#/entities/ResumeVersion" },
+      "description": "User-owned resume history versions."
     }
   }
 }

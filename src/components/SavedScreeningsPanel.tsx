@@ -9,6 +9,7 @@ import {
   type SavedCandidateRecord,
   type SavedScreeningRecord,
 } from '../lib/firestoreService.ts';
+import type { ScreenedCandidateResult } from '../shared/screener.ts';
 import { CandidateCard } from './CandidateCard.tsx';
 import { ScoreHistogram, type ScoreBin } from './ScoreHistogram.tsx';
 
@@ -18,6 +19,9 @@ interface SavedScreeningsPanelProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onOpenLogin: () => void;
+  onOpenInAiStudio?: (candidate: ScreenedCandidateResult, targetRole?: string) => void;
+  onSaveVersion?: (candidate: ScreenedCandidateResult, targetRole?: string) => Promise<void>;
+  onTrackJob?: (candidate: ScreenedCandidateResult, targetRole?: string) => void;
 }
 
 export function SavedScreeningsPanel({
@@ -26,6 +30,9 @@ export function SavedScreeningsPanel({
   selectedId,
   onSelect,
   onOpenLogin,
+  onOpenInAiStudio,
+  onSaveVersion,
+  onTrackJob,
 }: SavedScreeningsPanelProps) {
   const { user } = useAuth();
   const [candidates, setCandidates] = useState<SavedCandidateRecord[]>([]);
@@ -239,11 +246,27 @@ export function SavedScreeningsPanel({
                       candidate={cand}
                       rank={idx + 1}
                       totalCount={filteredCandidates.length}
+                      targetRole={selectedScreening.targetRole}
                       isPersisted
                       status={cand.status}
                       notes={cand.notes}
                       onUpdateReview={(updates) =>
                         updateCandidateReview(selectedScreening.id, cand.id, updates)
+                      }
+                      onOpenInAiStudio={
+                        onOpenInAiStudio
+                          ? (c) => onOpenInAiStudio(c, selectedScreening.targetRole)
+                          : undefined
+                      }
+                      onSaveVersion={
+                        onSaveVersion
+                          ? (c) => onSaveVersion(c, selectedScreening.targetRole)
+                          : undefined
+                      }
+                      onTrackJob={
+                        onTrackJob
+                          ? (c) => onTrackJob(c, selectedScreening.targetRole)
+                          : undefined
                       }
                     />
                   ))

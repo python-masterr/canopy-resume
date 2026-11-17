@@ -13,10 +13,21 @@ import {
   type ResumeInput,
   type RoleDefinition,
 } from './src/shared/screener.ts';
+import type { AiBuildResumeInput } from './src/shared/aiTypes.ts';
+import {
+  GeminiServiceError,
+  analyzeResumeWithAi,
+  buildResumeWithAi,
+  generateCareerRoadmapWithAi,
+  generateInterviewPrepWithAi,
+  improveResumeWithAi,
+} from './src/server/gemini.ts';
 
 dotenv.config();
 
 const workerPath = path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs');
+const cMapUrl = `${pathToFileURL(path.resolve(process.cwd(), 'node_modules/pdfjs-dist/cmaps')).href}/`;
+const standardFontDataUrl = `${pathToFileURL(path.resolve(process.cwd(), 'node_modules/pdfjs-dist/standard_fonts')).href}/`;
 pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
 const app = express();
@@ -36,23 +47,35 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
+    cMapUrl,
+    cMapPacked: true,
+    standardFontDataUrl,
+    verbosity: 0,
   });
   const pdf = await loadingTask.promise;
-  const pages: string[] = [];
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => {
-        if ('str' in item) {
-          return item.str + (item.hasEOL ? '\n' : ' ');
+  try {
+    const pages: string[] = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      let lastY: number | null = null;
+      const chunks: string[] = [];
+      for (const item of content.items) {
+        if (!('str' in item)) continue;
+        const currentY = Array.isArray(item.transform) ? Number(item.transform[5]) : null;
+        if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 3) {
+          chunks.push('\n');
         }
-        return '';
-      })
-      .join('');
-    pages.push(pageText);
+        chunks.push(item.str);
+        chunks.push(item.hasEOL ? '\n' : ' ');
+        if (currentY !== null) lastY = currentY;
+      }
+      pages.push(chunks.join('').replace(/[ \t]+\n/g, '\n'));
+    }
+    return pages.join('\n');
+  } finally {
+    await loadingTask.destroy();
   }
-  return pages.join('\n');
 }
 
 async function extractFileText(file: Express.Multer.File): Promise<string> {
@@ -138,6 +161,7 @@ app.post('/api/screen', (req, res) => {
     resumes?: ResumeInput[];
     customRoles?: RoleDefinition[];
     targetRole?: string;
+    jobDescription?: string;
   };
 
   if (!body || !Array.isArray(body.resumes) || body.resumes.length === 0) {
@@ -166,9 +190,151 @@ app.post('/api/screen', (req, res) => {
     : [];
 
   const targetRole = typeof body.targetRole === 'string' ? body.targetRole : 'All Roles';
-  const result = screenPool(validResumes, customRoles, targetRole);
+  const jobDescription = typeof body.jobDescription === 'string' ? body.jobDescription : '';
+  const result = screenPool(validResumes, customRoles, targetRole, jobDescription);
   res.json(result);
 });
+
+function handleAiError(res: express.Response, err: unknown) {
+  if (err instanceof GeminiServiceError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  const message = err instanceof Error ? err.message : 'Unexpected AI service error.';
+  res.status(500).json({ error: message });
+}
+
+app.post('/api/ai/analyze', async (req, res) => {
+  const body = req.body as { resumeText?: string; targetRole?: string; jobDescription?: string };
+  if (!body?.resumeText || typeof body.resumeText !== 'string' || !body.resumeText.trim()) {
+    res.status(400).json({ error: 'Provide resume text to run AI analysis.' });
+    return;
+  }
+  try {
+    const result = await analyzeResumeWithAi({
+      resumeText: body.resumeText,
+      targetRole: typeof body.targetRole === 'string' ? body.targetRole : '',
+      jobDescription: typeof body.jobDescription === 'string' ? body.jobDescription : '',
+    });
+    res.json(result);
+  } catch (err) {
+    handleAiError(res, err);
+  }
+});
+
+app.post('/api/ai/improve', async (req, res) => {
+  const body = req.body as { resumeText?: string; targetRole?: string; jobDescription?: string };
+  if (!body?.resumeText || typeof body.resumeText !== 'string' || !body.resumeText.trim()) {
+    res.status(400).json({ error: 'Provide resume text to generate AI improvements.' });
+    return;
+  }
+  try {
+    const result = await improveResumeWithAi({
+      resumeText: body.resumeText,
+      targetRole: typeof body.targetRole === 'string' ? body.targetRole : '',
+      jobDescription: typeof body.jobDescription === 'string' ? body.jobDescription : '',
+    });
+    res.json(result);
+  } catch (err) {
+    handleAiError(res, err);
+  }
+});
+
+app.post('/api/ai/build-resume', async (req, res) => {
+  const body = req.body as Partial<AiBuildResumeInput>;
+  if (!body?.fullName?.trim() || !body?.targetRole?.trim()) {
+    res.status(400).json({ error: 'Full name and target role are required to build a resume.' });
+    return;
+  }
+  try {
+    const result = await buildResumeWithAi({
+      fullName: String(body.fullName || ''),
+      email: String(body.email || ''),
+      phone: String(body.phone || ''),
+      location: String(body.location || ''),
+      links: String(body.links || ''),
+      targetRole: String(body.targetRole || ''),
+      yearsExperience: String(body.yearsExperience || ''),
+      summaryInput: String(body.summaryInput || ''),
+      skillsInput: String(body.skillsInput || ''),
+      experienceInput: String(body.experienceInput || ''),
+      educationInput: String(body.educationInput || ''),
+      projectsInput: String(body.projectsInput || ''),
+      jobDescription: typeof body.jobDescription === 'string' ? body.jobDescription : '',
+    });
+    res.json(result);
+  } catch (err) {
+    handleAiError(res, err);
+  }
+});
+
+app.post('/api/ai/interview-prep', async (req, res) => {
+  const body = req.body as { resumeText?: string; targetRole?: string; jobDescription?: string };
+  if (!body?.resumeText || typeof body.resumeText !== 'string' || !body.resumeText.trim()) {
+    res.status(400).json({ error: 'Provide resume text to generate tailored interview questions.' });
+    return;
+  }
+  try {
+    const result = await generateInterviewPrepWithAi({
+      resumeText: body.resumeText,
+      targetRole: typeof body.targetRole === 'string' ? body.targetRole : '',
+      jobDescription: typeof body.jobDescription === 'string' ? body.jobDescription : '',
+    });
+    res.json(result);
+  } catch (err) {
+    handleAiError(res, err);
+  }
+});
+
+app.post('/api/ai/career-roadmap', async (req, res) => {
+  const body = req.body as {
+    resumeText?: string;
+    targetRole?: string;
+    jobDescription?: string;
+    timeframeWeeks?: number;
+  };
+  if (!body?.resumeText || typeof body.resumeText !== 'string' || !body.resumeText.trim()) {
+    res.status(400).json({ error: 'Provide resume text to build a career and learning roadmap.' });
+    return;
+  }
+  try {
+    const result = await generateCareerRoadmapWithAi({
+      resumeText: body.resumeText,
+      targetRole: typeof body.targetRole === 'string' ? body.targetRole : '',
+      jobDescription: typeof body.jobDescription === 'string' ? body.jobDescription : '',
+      timeframeWeeks: typeof body.timeframeWeeks === 'number' ? body.timeframeWeeks : 6,
+    });
+    res.json(result);
+  } catch (err) {
+    handleAiError(res, err);
+  }
+});
+
+app.use(
+  (
+    err: unknown,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+  ) => {
+    if (!req.path.startsWith('/api/')) {
+      next(err);
+      return;
+    }
+    if (err instanceof multer.MulterError) {
+      const msg =
+        err.code === 'LIMIT_FILE_SIZE'
+          ? 'File is too large. Upload files under 10 MB.'
+          : err.code === 'LIMIT_FILE_COUNT'
+            ? 'Too many files selected. Upload up to 20 files at once.'
+            : err.message;
+      res.status(400).json({ error: msg });
+      return;
+    }
+    const message = err instanceof Error ? err.message : 'Unexpected server error.';
+    res.status(500).json({ error: message });
+  },
+);
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

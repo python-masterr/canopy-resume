@@ -1,16 +1,35 @@
-import { useState } from 'react';
-import { Check, Plus, Save } from 'lucide-react';
-import type { ScreenedCandidateResult } from '../shared/screener.ts';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Briefcase,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileDown,
+  History,
+  Plus,
+  Save,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import {
+  computeAtsDiagnostics,
+  type ScreenedCandidateResult,
+} from '../shared/screener.ts';
 import type { CandidateStatus } from '../lib/firestoreService.ts';
+import { downloadCandidateReportPdf } from '../lib/pdfExport.ts';
 
 interface CandidateCardProps {
   candidate: ScreenedCandidateResult;
   rank?: number;
   totalCount?: number;
+  targetRole?: string;
   isPersisted?: boolean;
   status?: CandidateStatus;
   notes?: string;
   onUpdateReview?: (updates: { status?: CandidateStatus; notes?: string }) => Promise<void>;
+  onOpenInAiStudio?: (candidate: ScreenedCandidateResult) => void;
+  onSaveVersion?: (candidate: ScreenedCandidateResult) => Promise<void>;
+  onTrackJob?: (candidate: ScreenedCandidateResult) => void;
 }
 
 const STATUS_OPTIONS: Array<{ value: CandidateStatus; label: string }> = [
@@ -24,14 +43,36 @@ export function CandidateCard({
   candidate,
   rank,
   totalCount = 1,
+  targetRole,
   isPersisted = false,
   status = 'new',
   notes = '',
   onUpdateReview,
+  onOpenInAiStudio,
+  onSaveVersion,
+  onTrackJob,
 }: CandidateCardProps) {
   const [draftNotes, setDraftNotes] = useState(notes);
   const [savingReview, setSavingReview] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [showAtsDetails, setShowAtsDetails] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
+  const [versionSaved, setVersionSaved] = useState(false);
+
+  useEffect(() => {
+    setDraftNotes(notes);
+    setVersionSaved(false);
+  }, [notes, candidate.id]);
+
+  const atsReport = useMemo(
+    () =>
+      candidate.atsChecks ??
+      computeAtsDiagnostics(
+        candidate.fullText || candidate.rawTextPreview || '',
+        candidate.detectedSkills,
+      ),
+    [candidate],
+  );
 
   const isArchived = status === 'archived';
   const bannerBg =
@@ -61,6 +102,18 @@ export function CandidateCard({
     }
   };
 
+  const handleSaveHistory = async () => {
+    if (!onSaveVersion) return;
+    setSavingVersion(true);
+    try {
+      await onSaveVersion(candidate);
+      setVersionSaved(true);
+      setTimeout(() => setVersionSaved(false), 2500);
+    } finally {
+      setSavingVersion(false);
+    }
+  };
+
   return (
     <article className="bg-[var(--card)] border border-[var(--line)] rounded-2xl p-6 mb-4">
       <div
@@ -79,37 +132,72 @@ export function CandidateCard({
             </div>
             <div className="text-sm opacity-90">
               {candidate.name}
-              {candidate.sourceFileName ? ` (${candidate.sourceFileName})` : ''} · Strongest:{' '}
-              {candidate.strongestArea.toLowerCase()} · Biggest gain:{' '}
-              {candidate.weakestArea.toLowerCase()}
+              {candidate.sourceFileName ? ` (${candidate.sourceFileName})` : ''} · ATS Grade{' '}
+              <span className="font-mono-tabular font-semibold">{atsReport.grade}</span> (
+              <span className="font-mono-tabular">{atsReport.atsScore}%</span>)
+              {candidate.jdMatch ? (
+                <>
+                  {' '}
+                  · JD Fit <span className="font-mono-tabular font-semibold">{candidate.jdMatch.pct}%</span>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
 
-        {isPersisted && onUpdateReview && (
-          <div className="flex items-center gap-2">
-            <label htmlFor={`status-${candidate.id}`} className="sr-only">
-              Review status
-            </label>
-            <select
-              id={`status-${candidate.id}`}
-              value={status}
-              disabled={savingReview || isArchived}
-              onChange={(e) => void handleStatusChange(e.target.value as CandidateStatus)}
-              className="rounded-lg px-3 py-2 text-xs font-semibold bg-black/20 text-current border border-white/25 cursor-pointer disabled:opacity-60"
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => downloadCandidateReportPdf(candidate, { targetRole })}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-black/20 text-current border border-white/25 hover:bg-black/30 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            <span>PDF Report</span>
+          </button>
+
+          {onOpenInAiStudio && (
+            <button
+              type="button"
+              onClick={() => onOpenInAiStudio(candidate)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-white text-[#12261b] hover:opacity-95 transition-opacity cursor-pointer whitespace-nowrap shrink-0"
             >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="text-[#12261b] bg-white">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+              <Sparkles className="w-3.5 h-3.5 text-[#2c7a4b]" />
+              <span>AI Studio</span>
+            </button>
+          )}
+
+          {isPersisted && onUpdateReview && (
+            <>
+              <label htmlFor={`status-${candidate.id}`} className="sr-only">
+                Review status
+              </label>
+              <select
+                id={`status-${candidate.id}`}
+                value={status}
+                disabled={savingReview || isArchived}
+                onChange={(e) => void handleStatusChange(e.target.value as CandidateStatus)}
+                className="rounded-lg px-3 py-2 text-xs font-semibold bg-black/20 text-current border border-white/25 cursor-pointer disabled:opacity-60"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="text-[#12261b] bg-white">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Key metrics row with tabular numerals */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-5 mb-5 border-b border-[var(--line)]">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 pb-5 mb-5 border-b border-[var(--line)]">
+        <div>
+          <div className="text-2xl font-bold font-mono-tabular text-[var(--ink)]">
+            {atsReport.atsScore}
+            <span className="text-xs font-normal text-[var(--mut)]">/100</span>
+          </div>
+          <div className="text-xs text-[var(--mut)]">Advanced ATS ({atsReport.grade})</div>
+        </div>
         <div>
           <div className="text-2xl font-bold font-mono-tabular text-[var(--ink)]">
             {candidate.yearsExperience || '–'}
@@ -135,6 +223,146 @@ export function CandidateCard({
           <div className="text-xs text-[var(--mut)]">Words</div>
         </div>
       </div>
+
+      {/* Quick workspace actions */}
+      {(onSaveVersion || onTrackJob) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-[var(--line)]">
+          <span className="text-xs text-[var(--mut)]">
+            Strongest: <strong className="text-[var(--ink)]">{candidate.strongestArea}</strong> ·
+            Biggest gain: <strong className="text-[var(--ink)]">{candidate.weakestArea}</strong>
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {onSaveVersion && (
+              <button
+                type="button"
+                disabled={savingVersion || versionSaved}
+                onClick={() => void handleSaveHistory()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] hover:border-[var(--acc)] disabled:opacity-60 cursor-pointer"
+              >
+                <History className="w-3.5 h-3.5 text-[var(--acc)]" />
+                <span>{versionSaved ? 'Saved to History' : savingVersion ? 'Saving…' : 'Save to History'}</span>
+              </button>
+            )}
+            {onTrackJob && (
+              <button
+                type="button"
+                onClick={() => onTrackJob(candidate)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] hover:border-[var(--acc)] cursor-pointer"
+              >
+                <Briefcase className="w-3.5 h-3.5 text-[var(--acc)]" />
+                <span>Track Application</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Advanced ATS Compatibility Checks */}
+      <div className="mb-6 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
+        <button
+          type="button"
+          onClick={() => setShowAtsDetails((s) => !s)}
+          className="w-full flex items-center justify-between gap-3 text-left cursor-pointer"
+        >
+          <div>
+            <div className="text-xs font-semibold text-[var(--ink)]">
+              Advanced ATS Compatibility · {atsReport.atsScore}/100 (Grade {atsReport.grade})
+            </div>
+            <div className="text-xs text-[var(--mut)] mt-0.5">
+              {atsReport.checks.filter((c) => c.passed).length}/{atsReport.checks.length} structural &amp;
+              readability checks passed
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--acc)] shrink-0">
+            <span>{showAtsDetails ? 'Hide details' : 'Inspect checks'}</span>
+            {showAtsDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </span>
+        </button>
+
+        {showAtsDetails && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-4 pt-3 border-t border-[var(--line)]">
+            {atsReport.checks.map((chk) => (
+              <div
+                key={chk.label}
+                className="flex items-start gap-2.5 rounded-lg bg-[var(--card)] border border-[var(--line)] p-3"
+              >
+                {chk.passed ? (
+                  <Check className="w-4 h-4 text-[var(--acc)] shrink-0 mt-0.5" />
+                ) : (
+                  <X className="w-4 h-4 text-[var(--bad)] shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-semibold text-[var(--ink)]">{chk.label}</span>
+                    <span className="text-xs font-mono-tabular text-[var(--mut)]">
+                      {chk.score}/{chk.max}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--mut)] mt-0.5">{chk.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Job Description Match */}
+      {candidate.jdMatch && (
+        <div className="mb-6 rounded-xl border border-[var(--acc)] bg-[color-mix(in_srgb,var(--acc)_6%,transparent)] p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <div>
+              <h3 className="text-xs font-semibold text-[var(--ink)]">Job description match</h3>
+              <p className="text-xs text-[var(--mut)]">{candidate.jdMatch.summary}</p>
+            </div>
+            <div className="text-lg font-bold font-mono-tabular text-[var(--acc)]">
+              {candidate.jdMatch.pct}% fit
+            </div>
+          </div>
+          <div className="h-1.5 rounded bg-[var(--line)] overflow-hidden mb-3">
+            <div
+              className="h-full bg-[var(--acc)] transition-all duration-300"
+              style={{ width: `${candidate.jdMatch.pct}%` }}
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {candidate.jdMatch.matchedSkills.map((sk) => (
+              <span
+                key={`jd-ok-${sk}`}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-[color-mix(in_srgb,var(--acc)_16%,transparent)] text-[var(--ink)]"
+              >
+                <Check className="w-3 h-3 text-[var(--acc)]" />
+                <span>{sk}</span>
+              </span>
+            ))}
+            {candidate.jdMatch.matchedKeywords.map((kw) => (
+              <span
+                key={`jd-kw-${kw}`}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium bg-[var(--card)] border border-[var(--line)] text-[var(--ink)]"
+              >
+                <Check className="w-3 h-3 text-[var(--acc)]" />
+                <span>{kw}</span>
+              </span>
+            ))}
+            {candidate.jdMatch.missingSkills.map((sk) => (
+              <span
+                key={`jd-miss-${sk}`}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-[var(--bad)] text-[var(--bad)]"
+              >
+                <Plus className="w-3 h-3" />
+                <span>JD Gap: {sk}</span>
+              </span>
+            ))}
+            {candidate.jdMatch.missingKeywords.slice(0, 6).map((kw) => (
+              <span
+                key={`jd-misskw-${kw}`}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border border-[var(--line)] text-[var(--mut)]"
+              >
+                <span>Missing keyword: {kw}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Matched roles & skill gaps */}
       <div className="mb-6">
